@@ -1,0 +1,10 @@
+add_library(buffer_pool2 INTERFACE)
+target_include_directories(buffer_pool2 INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(buffer_pool2 INTERFACE project_compiler_flags)
+
+add_executable(buffer_pool2_tests buffer_pool2_tests.cpp)
+
+target_link_libraries(buffer_pool2_tests PUBLIC buffer_pool2)
+target_link_libraries(buffer_pool2_tests PRIVATE Catch2::Catch2WithMain config)
+
+catch_discover_tests(buffer_pool2_tests)

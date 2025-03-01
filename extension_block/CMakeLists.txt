@@ -1,0 +1,10 @@
+add_library(extension_block INTERFACE)
+target_include_directories(extension_block INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(extension_block INTERFACE project_compiler_flags)
+
+add_executable(extension_block_tests extension_block_tests.cpp)
+
+target_link_libraries(extension_block_tests PUBLIC extension_block)
+target_link_libraries(extension_block_tests PRIVATE Catch2::Catch2WithMain block hashtable SSDLog)
+
+catch_discover_tests(extension_block_tests)

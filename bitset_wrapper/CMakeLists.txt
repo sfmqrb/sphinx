@@ -1,0 +1,9 @@
+add_library(bitset_wrapper INTERFACE)
+target_include_directories(bitset_wrapper INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(bitset_wrapper INTERFACE project_compiler_flags)
+
+add_executable(bitset_wrapper_tests bitset_wrapper_tests.cpp)
+
+target_link_libraries(bitset_wrapper_tests PUBLIC bitset_wrapper)
+target_link_libraries(bitset_wrapper_tests PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(bitset_wrapper_tests)

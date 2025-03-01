@@ -1,0 +1,3 @@
+add_library(fingerprint_gen_helper INTERFACE)
+target_include_directories(fingerprint_gen_helper INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(fingerprint_gen_helper INTERFACE project_compiler_flags)
