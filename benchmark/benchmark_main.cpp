@@ -5,12 +5,12 @@
 #include <vector>
 #include <random>
 #include <cmath>
-#include <numeric>
 #include <unordered_map>
 
 #include "../directory/directory.h"
 #include "recorder/recorder.h"
 #include "../lib/memento/memento.hpp"
+#include "../lib/zipfYCSB/zipfian_generator.h"
 #ifdef IN_MEMORY_FILE
 // parameters memory
 constexpr size_t RSQF_STATIC_FP_SIZE = 15;
@@ -35,18 +35,37 @@ constexpr size_t NUM_KEYS_TOTAL = static_cast<size_t>(0.91 * INIT_SIZE * (1 << R
 constexpr auto SIZE_KEY_INFINI_LOG = MAX_INFINI_EXP + INIT_SIZE_LOG;
 constexpr size_t TAIL_LATENCY_CNT = 1000;
 std::mt19937 gen(12345); // Mersenne Twister random number generator
+ycsbc::ZipfianGenerator zipfian_gen(1, NUM_KEYS_TOTAL);
 
 inline size_t get_random_key(size_t min, size_t max) {
     std::uniform_int_distribution<size_t> dist(min, max);
     return dist(gen);
 }
 
-std::vector<size_t> generate_random_keys(size_t min, size_t max, size_t count) {
+std::vector<size_t> _generate_zipfian_keys(size_t kTotalKeys, size_t count, size_t min, size_t max) {
     std::vector<size_t> keys;
-    for (size_t j = 0; j < count; ++j) {
-        keys.push_back(get_random_key(min, max));
+    while (keys.size() <= count) {
+        size_t key = zipfian_gen.Next(max + 1);
+        assert(key > 0);
+        assert(key <= kTotalKeys);
+        if (key < min || key > max) {
+            continue;
+        }
+        keys.push_back(key);
     }
     return keys;
+}
+
+std::vector<size_t> generate_random_keys(size_t min, size_t max, size_t count, bool override = false) {
+    if (MAIN_BENCHMARK_ZIPF == true && !override) {
+        return _generate_zipfian_keys(NUM_KEYS_TOTAL, count, min, max);
+    } else {
+        std::vector<size_t> keys;
+        for (size_t j = 0; j < count; ++j) {
+            keys.push_back(get_random_key(min, max));
+        }
+        return keys;
+    }
 }
 
 // New helper function: returns true when the logarithm of the current step
@@ -133,6 +152,7 @@ void readFilter(const memento::Memento<Traits::IS_INFINI> &filter, const SSDLog<
         ssdLog.read(r, entry_type);
         if (entry_type.key == selectedKey) {
             flag = true;
+            break;
         }
     }
     if (!flag) {
@@ -180,7 +200,7 @@ void verifyFPR(const memento::Memento<Traits::IS_INFINI> &filter, size_t num_key
 #endif
     constexpr size_t total_test_size = 100000;
     auto fpr = get_fpr<Traits>(filter, init_slot_log, num_keys_inserted);
-    auto keys = generate_random_keys(num_keys_inserted + 10, num_keys_inserted + total_test_size * 100, total_test_size);
+    auto keys = generate_random_keys(num_keys_inserted + 10, num_keys_inserted + total_test_size * 100, total_test_size, true);
     size_t false_positives = 0;
     for (auto key : keys) {
         auto res = get_range<Traits>(filter, key);
@@ -210,21 +230,13 @@ void updateFilter(memento::Memento<Traits::IS_INFINI>& filter, const SSDLog<Trai
         if (entry_type.key == selectedKey) {
             flag = true;
             memento = r;
+            break;
         }
     }
     if (!flag) {
         std::cout << " : key not found\n";
         throw std::invalid_argument("Error: key not found here2");
     }
-    // auto res_delete = filter.delete_single(selectedKey, memento, memento::Memento<true>::flag_no_lock);
-    // if (res_delete != 0) {
-    //     throw std::invalid_argument("Error: key delete unsuccessful in filter");
-    // }
-
-    // auto res_insert = filter.insert(selectedKey, newMem, memento::Memento<true>::flag_no_lock);
-    // if (res_insert < 0) {
-    //     throw std::invalid_argument("Error: key update(insert) unsuccessful in filter");
-    // }
     auto res_update = filter.update_single(selectedKey, memento, newMem, memento::Memento<true>::flag_no_lock);
     if (res_update != 0) {
         throw std::invalid_argument("Error: key update unsuccessful in filter");
@@ -235,6 +247,14 @@ void updateFilter(memento::Memento<Traits::IS_INFINI>& filter, const SSDLog<Trai
 template <typename Traits>
 void insert_pht(memento::Memento<true>& filter, std::unordered_map<size_t, size_t>& stash_dict, SSDLog<Traits>& ssdLog, const size_t key, const size_t value) {
     auto pt = ssdLog.write(key, value);
+    // update if present in stash list
+    auto it = stash_dict.find(key);
+    if (it != stash_dict.end()) {
+        if (it->first == key) {
+            it->second = value;
+            return;
+        }
+    }
     auto res = get_range<Traits>(filter, key);
 
     bool stashed = false;
@@ -281,7 +301,12 @@ void update_pht(memento::Memento<true>& filter, std::unordered_map<size_t, size_
 }
 // memory helper functions
 template <typename Traits>
-double get_memory_filter(memento::Memento<Traits::IS_INFINI>& filter) { return static_cast<double>(8 * filter.size_in_bytes() - filter.get_num_memento_bits() * (filter.metadata_->xnslots)); }
+double get_memory_filter(memento::Memento<Traits::IS_INFINI>& filter, bool including_ptr=false) { 
+    size_t reduced_size = filter.get_num_memento_bits() * (filter.metadata_->xnslots);
+    if (including_ptr)
+        reduced_size = 0;
+    return static_cast<double>(8 * filter.size_in_bytes() - reduced_size); 
+}
 
 template <typename Traits>
 size_t get_memory_stash(std::unordered_map<size_t, size_t>& stash_dict) {
@@ -301,6 +326,7 @@ void Run(
     Metrics metrics;
     size_t insertion_total = 0;
     size_t insertion_count = 0;
+    std::vector<size_t> insertions;
     for (size_t i = 1; i <= numKeys; ++i) {
         if (should_sample(i))
             std::cout << i << std::endl;
@@ -312,6 +338,7 @@ void Run(
         dir.writeSegmentSingleThread(key, value, ssdLog, pt);
         auto end_insertion = std::chrono::high_resolution_clock::now();
         auto du_insertion = std::chrono::duration_cast<std::chrono::nanoseconds>(end_insertion - start_insertion).count();
+        insertions.push_back(du_insertion);
         insertion_total += du_insertion;
         insertion_count++;
 
@@ -320,10 +347,14 @@ void Run(
             metrics.record("insertion_time", insertion_total / insertion_count);
             insertion_count = 0;
             insertion_total = 0;
+
+            insertions = select_percentiles(insertions, {99.0, 99.9});
+            std::cout << "tail-99-i: " << insertions[0] << " - tail-99.9-i: " << insertions[1] << std::endl;
+            metrics.record("tail-99-i", insertions[0]);
+            insertions.clear();
         }
 
         if (Traits::NUMBER_EXTRA_BITS > 1 && i > 2) {
-            // rejuvinate
             auto rej_key = get_random_key(1, i - 1);
             dir.readSegmentSingleThread(rej_key, ssdLog);
         }
@@ -394,7 +425,9 @@ void Run(
         // FPR and memory record
         if (should_sample(i)) {
             auto memory_footprint = dir.get_memory_footprint(i);
+            auto memory_inc_ptr = dir.get_memory_including_ptr();
             metrics.record("memory", memory_footprint);
+            metrics.record("memory_including_ptr", memory_inc_ptr / i);
             metrics.record("FPR", 0);
             metrics.record("num_entries", i);
         }
@@ -411,7 +444,7 @@ void Run(
     if (Traits::NUMBER_EXTRA_BITS > 1) {
         name += "-ReserveBits" + std::to_string(Traits::NUMBER_EXTRA_BITS);
     }
-    metrics.printToFile({"num_entries", "insertion_time", "query_time", "update_time", "memory", "FPR", "tail-99-q", "tail-99.9-q", "tail-99-u", "tail-99.9-u"},
+    metrics.printToFile({"num_entries", "insertion_time", "query_time", "update_time", "memory", "memory_including_ptr", "FPR", "tail-99-q", "tail-99.9-q", "tail-99-u", "tail-99.9-u", "tail-99-i"},
                         folder + "/benchmark_", name);
 }
 
@@ -426,6 +459,7 @@ void RunPHT(
     Metrics metrics;
     size_t insertion_total = 0;
     size_t insertion_count = 0;
+    std::vector<size_t> insertions;
     for (size_t i = 1; i <= numKeys; ++i) {
         if (should_sample(i))
             std::cout << i << std::endl;
@@ -437,12 +471,17 @@ void RunPHT(
         auto du_insertion = std::chrono::duration_cast<std::chrono::nanoseconds>(end_insertion - start_insertion).count();
         insertion_total += du_insertion;
         insertion_count++;
+        insertions.push_back(du_insertion);
         const bool gonna_expand = would_expand<Traits>(filter);
         // insertion record
         if (should_sample(i, gonna_expand)) {
             metrics.record("insertion_time", insertion_total / insertion_count);
             insertion_count = 0;
             insertion_total = 0;
+            insertions = select_percentiles(insertions, {99.0, 99.9});
+            std::cout << "tail-99-i: " << insertions[0] << " - tail-99.9-i: " << insertions[1] << std::endl;
+            metrics.record("tail-99-i", insertions[0]);
+            insertions.clear();
         }
 
         // queries record
@@ -514,14 +553,21 @@ void RunPHT(
             metrics.record("memory", memory_footprint);
             std::cout << "memory footprint: " << memory_footprint << std::endl;
         }
-
+        // memory with ptrs
+        if (should_sample(i, gonna_expand)) {
+            auto memento_memory = get_memory_filter<Traits>(filter, true);
+            auto stash_memory = get_memory_stash<Traits>(stash_dict);
+            auto memory_footprint = (stash_memory + memento_memory) / i;
+            metrics.record("memory_including_ptr", memory_footprint);
+            std::cout << "memory including ptr footprint: " << memory_footprint << std::endl;
+        }
         if (should_sample(i, gonna_expand)) {
             metrics.record("FPR", 0);
             metrics.record("num_entries", i);
         }
     }
 
-    metrics.printToFile({"num_entries", "insertion_time", "query_time", "update_time", "memory", "FPR", "tail-99-q", "tail-99.9-q", "tail-99-u", "tail-99.9-u"},
+    metrics.printToFile({"num_entries", "insertion_time", "query_time", "update_time", "memory", "memory_including_ptr", "FPR", "tail-99-q", "tail-99.9-q", "tail-99-u", "tail-99.9-u", "tail-99-i"},
                         folder + "/benchmark_", "Perfect_HT");
 }
 
@@ -538,6 +584,7 @@ void RunFilter(
     Metrics metrics;
     size_t insertion_total = 0;
     size_t insertion_count = 0;
+    std::vector<size_t> insertions;
     for (size_t i = 1; i <= numKeys; ++i) {
         const auto key = i;
         const auto value = key;
@@ -548,11 +595,16 @@ void RunFilter(
         auto du_insertion = std::chrono::duration_cast<std::chrono::nanoseconds>(end_insertion - start_insertion).count();
         insertion_total += du_insertion;
         insertion_count++;
+        insertions.push_back(du_insertion);
         const bool gonna_expand = would_expand<Traits>(filter);
         if (should_sample(i, gonna_expand)) {
             metrics.record("insertion_time", insertion_total / insertion_count);
             insertion_count = 0;
             insertion_total = 0;
+            insertions = select_percentiles(insertions, {99.0, 99.9});
+            std::cout << "tail-99-i: " << insertions[0] << " - tail-99.9-i: " << insertions[1] << std::endl;
+            metrics.record("tail-99-i", insertions[0]);
+            insertions.clear();
         }
 
         if (should_sample(i, gonna_expand)) {
@@ -624,6 +676,12 @@ void RunFilter(
         }
 
         if (should_sample(i, gonna_expand)) {
+            auto memory_footprint = get_memory_filter<Traits>(filter, true) / i;
+            metrics.record("memory_including_ptr", memory_footprint);
+            std::cout << "memory including ptr footprint: " << memory_footprint << std::endl;
+        }
+
+        if (should_sample(i, gonna_expand)) {
             auto fpr = get_fpr<Traits>(filter, init_slot_log, i);
             if (i > 10000)
                 verifyFPR<Traits>(filter, i, init_slot_log);
@@ -643,7 +701,7 @@ void RunFilter(
         }
     }
 
-    metrics.printToFile( { "num_entries", "insertion_time", "query_time", "update_time", "memory", "FPR", "tail-99-q", "tail-99.9-q", "tail-99-u", "tail-99.9-u" },
+    metrics.printToFile( { "num_entries", "insertion_time", "query_time", "update_time", "memory", "memory_including_ptr", "FPR", "tail-99-q", "tail-99.9-q", "tail-99-u", "tail-99.9-u", "tail-99-i" },
                         folder + "/benchmark_", name);
 
 }
@@ -662,110 +720,114 @@ void performTest(const std::string &ssdLogPath, const std::string &folder) {
 
     Run(dir, *ssdLog, NUM_KEYS_TOTAL, folder);
 }
-// PerformTest function with added CSV output
-void performTestFilterRSQFNoExp(const std::string &ssdLogPath, const std::string &folder) {
-    memento::Memento<TestRSQF::IS_INFINI> filter(1ull << (12 + RSQF_STATIC_FP_SIZE), /* nslots */
-                                                 12 + RSQF_STATIC_FP_SIZE,   /* key_bits (fingerprint size) */
-                                                 32,  /* memento_bits = payload bit size */
-                                                 memento::Memento<TestRSQF::IS_INFINI>::hashmode::Default,
-                                                 12345 /* seed */, 0, 1);
-    filter.set_auto_resize(true);
-
-    auto ssdLog = std::make_unique<SSDLog<TestRSQF>>(ssdLogPath, APPEND_ONLY_LOG_SIZE);
-
-    RunFilter(filter, *ssdLog, NUM_KEYS_TOTAL, false, folder);
-}
 
 // PerformTest function with added CSV output
+template <typename TemplateClass>
 void performTestFilterRSQF(const std::string &ssdLogPath, const std::string &folder) {
     memento::Memento<TestRSQF::IS_INFINI> filter(INIT_SIZE, /* nslots */
                             12 + RSQF_STATIC_FP_SIZE,   /* key_bits (fingerprint size) */
                             32,  /* memento_bits = payload bit size */
-                            memento::Memento<TestRSQF::IS_INFINI>::hashmode::Default,
+                            memento::Memento<TemplateClass::IS_INFINI>::hashmode::Default,
                             12345 /* seed */, 0, 1);
     filter.set_auto_resize(true);
 
-    auto ssdLog = std::make_unique<SSDLog<TestRSQF>>(ssdLogPath, APPEND_ONLY_LOG_SIZE);
+    auto ssdLog = std::make_unique<SSDLog<TemplateClass>>(ssdLogPath, APPEND_ONLY_LOG_SIZE);
 
     RunFilter(filter, *ssdLog, NUM_KEYS_TOTAL, true, folder);
 }
 
 // PerformTest function with added CSV output
+template <typename TemplateClass>
 void performTestFilterInfini(const std::string &ssdLogPath, const std::string &folder) {
     memento::Memento<TestInfini::IS_INFINI> filter(INIT_SIZE, /* nslots */
                                                  SIZE_KEY_INFINI_LOG,   /* key_bits (fingerprint size) */
                                                  32,  /* memento_bits = payload bit size */
-                                                 memento::Memento<TestInfini::IS_INFINI>::hashmode::Default,
+                                                 memento::Memento<TemplateClass::IS_INFINI>::hashmode::Default,
                                                  12345 /* seed */, 0, 1);
     filter.set_auto_resize(true);
 
-    auto ssdLog = std::make_unique<SSDLog<TestInfini>>(ssdLogPath, APPEND_ONLY_LOG_SIZE);
+    auto ssdLog = std::make_unique<SSDLog<TemplateClass>>(ssdLogPath, APPEND_ONLY_LOG_SIZE);
 
     RunFilter(filter, *ssdLog, NUM_KEYS_TOTAL, true, folder);
 }
 
 // PerformTest function with added CSV output
+template <typename TemplateClass>
 void performTestPHT(const std::string &ssdLogPath, const std::string &folder) {
     memento::Memento<TestInfini::IS_INFINI> filter(INIT_SIZE, /* nslots */
                             INIT_SIZE_LOG + HASH_TABLE_FP_SIZE,   /* key_bits (fingerprint size) */
                             32,  /* memento_bits = payload bit size */
-                            memento::Memento<TestInfini::IS_INFINI>::hashmode::Default,
+                            memento::Memento<TemplateClass::IS_INFINI>::hashmode::Default,
                             12345 /* seed */, 0, 1);
     filter.set_auto_resize(true);
     std::unordered_map<size_t, size_t> stash_dict;
-    auto ssdLog = std::make_unique<SSDLog<TestInfini>>(ssdLogPath, APPEND_ONLY_LOG_SIZE);
+    auto ssdLog = std::make_unique<SSDLog<TemplateClass>>(ssdLogPath, APPEND_ONLY_LOG_SIZE);
 
     RunPHT(filter, stash_dict, *ssdLog, NUM_KEYS_TOTAL, folder);
 }
 
+
 int main() {
 #ifndef IN_MEMORY_FILE
     std::vector<std::pair<std::string, std::string>> configs = {
-        {HOME + "/research/dht/benchmark/data-ssd", "/data/fleck/directory_test.txt"},
-        // {HOME + "/research/dht/benchmark/data-optane", "/optane/log/directory_test.txt"},
+        {HOME + "/research/sphinx-review/benchmark/data-ssd", "/data/fleck/directory_test.txt"},
+//        {HOME + "/research/sphinx-review/benchmark/data-optane", "/optane/log/directory_test.txt"},
     };
 
+    if constexpr (MAIN_BENCHMARK_ZIPF) {
+        configs = {
+            {HOME + "/research/sphinx-review/benchmark/data-ssd-zipf", "/data/fleck/directory_test.txt"},
+//            {HOME + "/research/sphinx-review/benchmark/data-optane-zipf", "/optane/log/directory_test.txt"},
+        };
+    }
     // Iterate over each configuration
     for (const auto& [dataFolder, ssdLogPath] : configs) {
         std::cout << "Running tests with folder: " << dataFolder << " and SSD log: " << ssdLogPath << std::endl;
         // Create the directory (and any necessary parent directories)
         std::filesystem::create_directories(dataFolder);
         std::cout << " Test RSQF\n";
-        performTestFilterRSQF(ssdLogPath, dataFolder);
-        // Run tests
+        performTestFilterRSQF<TestRSQF>(ssdLogPath, dataFolder);
         std::cout << " Test InfiniFilter\n";
-        performTestFilterInfini(ssdLogPath, dataFolder);
+        performTestFilterInfini<TestInfini>(ssdLogPath, dataFolder);
         std::cout << " Test RSQF\n";
-        performTestFilterRSQF(ssdLogPath, dataFolder);
+        performTestFilterRSQF<TestRSQF>(ssdLogPath, dataFolder);
         std::cout << " Test PHT\n";
-        performTestPHT(ssdLogPath, dataFolder);
+        performTestPHT<TestInfini>(ssdLogPath, dataFolder);
         std::cout << " Test Fleck-Loop\n";
         performTest<TestDHTInMemory>(ssdLogPath, dataFolder);
         std::cout << " Test Fleck\n";
         performTest<TestFleckInMemory>(ssdLogPath, dataFolder);
+        std::cout << " Test Fleck 4\n";
+        performTest<TestFleckInMemoryExtraBits4P32>(ssdLogPath, dataFolder);
     }
 #else
-    const auto dataFolder = HOME + "/research/dht/benchmark/data-memory";
+    auto dataFolder = HOME + "/research/sphinx-review/benchmark/data-memory";
+    if constexpr (MAIN_BENCHMARK_ZIPF) {
+        dataFolder += "-zipf";
+    }
     const auto ssdLogPath = "directory_cpu_test.txt";
     std::filesystem::create_directories(dataFolder);
-    // std::cout << " Test RSQF\n";
-    // performTestFilterRSQF(ssdLogPath, dataFolder);
-    // performTestFilterRSQF(ssdLogPath, dataFolder);
-    // std::cout << " Test InfiniFilter\n";
-    // performTestFilterInfini(ssdLogPath, dataFolder);
-    // performTestFilterInfini(ssdLogPath, dataFolder);
-    // std::cout << " Test Perfect HT\n";
-    // performTestPHT(ssdLogPath, dataFolder);
-    // performTestPHT(ssdLogPath, dataFolder);
-    // std::cout << " Test DHT\n";
-    // performTest<TestRealDHTInMemory>(ssdLogPath, dataFolder);
-    // performTest<TestRealDHTInMemory>(ssdLogPath, dataFolder);
-    // std::cout << " Test Fleck-Loop\n";
-    // performTest<TestDHTInMemory>(ssdLogPath, dataFolder);
-    // performTest<TestDHTInMemory>(ssdLogPath, dataFolder);
-    std::cout << " Test Fleck\n";
-    performTest<TestFleckInMemory>(ssdLogPath, dataFolder);
-    performTest<TestFleckInMemory>(ssdLogPath, dataFolder);
+    std::cout << " Test RSQF\n";
+    performTestFilterRSQF<TestRSQFInMem>(ssdLogPath, dataFolder);
+    performTestFilterRSQF<TestRSQFInMem>(ssdLogPath, dataFolder);
+    std::cout << " Test InfiniFilter\n";
+    performTestFilterInfini<TestInfiniInMem>(ssdLogPath, dataFolder);
+    performTestFilterInfini<TestInfiniInMem>(ssdLogPath, dataFolder);
+    std::cout << " Test Perfect HT\n";
+    performTestPHT<TestInfiniInMem>(ssdLogPath, dataFolder);
+    performTestPHT<TestInfiniInMem>(ssdLogPath, dataFolder);
+    std::cout << " Test DHT\n";
+    performTest<TestRealDHTInMemoryInMem>(ssdLogPath, dataFolder);
+    performTest<TestRealDHTInMemoryInMem>(ssdLogPath, dataFolder);
+    std::cout << " Test Fleck-Loop\n";
+    performTest<TestDHTInMemoryInMem>(ssdLogPath, dataFolder);
+    performTest<TestDHTInMemoryInMem>(ssdLogPath, dataFolder);
+    std::cout << " Test Sphinx\n";
+    performTest<TestFleckInMemoryInMem>(ssdLogPath, dataFolder);
+    performTest<TestFleckInMemoryInMem>(ssdLogPath, dataFolder);
+    std::cout << " Test Sphinx-4\n";
+    performTest<TestFleckInMemoryExtraBits4P32InMem>(ssdLogPath, dataFolder);
+    performTest<TestFleckInMemoryExtraBits4P32InMem>(ssdLogPath, dataFolder);
     return 0;
 #endif
 }

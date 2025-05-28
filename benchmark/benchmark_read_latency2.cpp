@@ -145,15 +145,12 @@ int performQueries(
 
 
 int main() {
-#ifdef IN_MEMORY_FILE
-    throw std::invalid_argument("This benchmark is not compatible with IN_MEMORY_FILE");
-#endif
 #ifndef ENABLE_BP_FOR_READ
     throw std::invalid_argument("ENABLE_BP_FOR_READ must be enabled");
 #endif
 
     // Ensure the data-skew directory exists
-    std::string dirPath = HOME + "/research/dht/benchmark/data-skew";
+    std::string dirPath = HOME + "/research/sphinx-review/benchmark/data-skew";
     if (!fs::exists(dirPath)) {
         fs::create_directory(dirPath);
     }

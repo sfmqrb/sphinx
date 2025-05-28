@@ -6,6 +6,17 @@
 #include "../SSDLog/SSDLog.h"
 #include "../block/block.h"
 #include "../config/config.h"
+
+// Forward‐declare the template so we can hold pointers to it
+#ifdef ENABLE_XDP
+template <
+  typename TraitsGI, 
+  typename TraitsLI, 
+  typename TraitsLIBuffer
+>
+class XDP;
+#endif
+
 struct pairStruct {
     size_t tenBefore;
     size_t ten;
@@ -14,7 +25,7 @@ struct pairStruct {
 
 struct ExtendedBlockInfo {
     size_t remaining_bits_BW_index{0};
-    std::unique_ptr<BlockInfo> blockInfo{nullptr};
+    BlockInfo blockInfo{};
 };
 
 struct StateExtendedBlk {
@@ -35,35 +46,33 @@ class ExtensionBlock {
     // not sure if it's a good choice to put it here after the blk performance wise
     BitsetWrapper<EXTENDED_BIT_WRAPPER_SIZE> lslotSizesBW;
     Block<Traits> blk;
-    [[nodiscard]] std::unique_ptr<ExtendedBlockInfo> get_extended_block_info() const {
-        auto info = std::make_unique<ExtendedBlockInfo>();  // Initialize info using std::make_unique
-        info->blockInfo = blk.get_block_info();
-        info->remaining_bits_BW_index = lslotSizesBW.get_leading_zeros(EXTENDED_BIT_WRAPPER_SIZE / REGISTER_SIZE - 1);
+    inline ExtendedBlockInfo get_extended_block_info() const {
+        ExtendedBlockInfo info;
+        info.blockInfo = blk.get_block_info();
+        info.remaining_bits_BW_index = lslotSizesBW.get_leading_zeros(EXTENDED_BIT_WRAPPER_SIZE / REGISTER_SIZE - 1);
         return info;
     }
-    [[nodiscard]] static std::unique_ptr<ExtendedBlockInfo> get_extended_block_info_DHT(Block<Traits> &_blk) {
-        auto info = std::make_unique<ExtendedBlockInfo>();  // Initialize info using std::make_unique
-        info->blockInfo = _blk.get_block_info();
-        info->remaining_bits_BW_index = COUNT_SLOT;
+    inline static ExtendedBlockInfo get_extended_block_info_DHT(Block<Traits> &_blk) {
+        ExtendedBlockInfo info;
+        info.blockInfo = _blk.get_block_info();
+        info.remaining_bits_BW_index = COUNT_SLOT;
         return info;
     }
-    [[nodiscard]] size_t calculatePhysicalLSlotIndex(const size_t blkIdx, const size_t lslot_before) const {
+    inline size_t calculatePhysicalLSlotIndex(const size_t blkIdx, const size_t lslot_before) const {
         size_t number_of_l_slots_before_this_blk;
         const auto number_blocks_before = lslotSizesBW.rank(blkIdx);
-        if (number_blocks_before == 0) {
+        if (number_blocks_before == 0)
             number_of_l_slots_before_this_blk = 0;
-        } else {
+        else 
             number_of_l_slots_before_this_blk = lslotSizesBW.select(number_blocks_before, 1) + 1;
-        }
         const auto num_all_lslots_before_this_lslot = number_of_l_slots_before_this_blk + lslot_before;
         return num_all_lslots_before_this_lslot;
     }
 
-    [[nodiscard]] pairStruct getNumberOfLSlotsAndSize(size_t blkIdx) const {
+    pairStruct getNumberOfLSlotsAndSize(size_t blkIdx) const {
         auto number_of_blocks_before = lslotSizesBW.rank(blkIdx);
-        if (number_of_blocks_before == 0) {
+        if (number_of_blocks_before == 0)
             return pairStruct{0, lslotSizesBW.get(blkIdx) ? lslotSizesBW.select(1, 1) + 1 : 0};
-        }
         size_t lslots_before_minus_1 = lslotSizesBW.select(number_of_blocks_before, 1);
         auto pair_val = lslotSizesBW.get(blkIdx) ? lslotSizesBW.select_two(number_of_blocks_before, number_of_blocks_before + 1, 1) : std::make_pair(lslots_before_minus_1, lslots_before_minus_1);
         return pairStruct{pair_val.first + 1, pair_val.second - pair_val.first};
@@ -75,16 +84,16 @@ class ExtensionBlock {
         const size_t slotLength = nextSlotStartIndex - originalSlotStartIndex;
         const size_t tenValue = originalBlock.get_ten(originalBlockSlotIndex);
 
-        const auto originalBlockInfo = originalBlock.get_block_info();
-        const auto extendedBlockInfo = get_extended_block_info();
+        const BlockInfo originalBlockInfo = originalBlock.get_block_info();
+        const ExtendedBlockInfo extendedBlockInfo = get_extended_block_info();
 
         const int blockSizeChange = static_cast<int>(tenValue + slotLength);
         const int bitWrapperSizeChange = 1;
         const int originalBlockSizeChange = static_cast<int>(-slotLength + 1);
 
-        const bool isExpansionPossible = blockSizeChange <= static_cast<int>(extendedBlockInfo->blockInfo->remainingBits) &&
-                                         bitWrapperSizeChange <= static_cast<int>(extendedBlockInfo->remaining_bits_BW_index) &&
-                                         originalBlockSizeChange <= static_cast<int>(originalBlockInfo->remainingBits);
+        const bool isExpansionPossible = blockSizeChange <= static_cast<int>(extendedBlockInfo.blockInfo.remainingBits) &&
+                                         bitWrapperSizeChange <= static_cast<int>(extendedBlockInfo.remaining_bits_BW_index) &&
+                                         originalBlockSizeChange <= static_cast<int>(originalBlockInfo.remainingBits);
 
         return isExpansionPossible;
     }
@@ -96,7 +105,7 @@ class ExtensionBlock {
             const auto exBlkIdx = (start_from_ex_blk + (slotIdxSrcBlk - slotIdxIt)) % Traits::SEGMENT_EXTENSION_BLOCK_SIZE;
             const auto &exBlk = extension_blocks[exBlkIdx];
 
-            const auto extendedBlockInfo = exBlk.get_extended_block_info();
+            const ExtendedBlockInfo extendedBlockInfo = exBlk.get_extended_block_info();
 
             const size_t originalSlotStartIndex = originalBlock.get_lslot_start(slotIdxIt);
             const size_t nextSlotStartIndex = originalBlock.get_lslot_start(slotIdxIt + 1);
@@ -108,12 +117,12 @@ class ExtensionBlock {
             statusExBlks[exBlkIdx].payloadSizeChange += static_cast<int>(tenValue);
             originalBlockSizeChange += static_cast<int>(-slotLength + 1); // -slotLength for the slot and +1 for overflowing bit
             // TODO: there is a bug here, caught in the memory benchmark fleck. Last correct commit: 18ef289846e53f9947d0e7c46ee1489a6aa46033
-            if (statusExBlks[exBlkIdx].blockSizeChange > static_cast<int>(extendedBlockInfo->blockInfo->remainingBits) ||
-                statusExBlks[exBlkIdx].bitWrapperSizeChange > static_cast<int>(extendedBlockInfo->remaining_bits_BW_index) ||
-                statusExBlks[exBlkIdx].payloadSizeChange > static_cast<int>(extendedBlockInfo->blockInfo->remainingPayload)) {
+            if (statusExBlks[exBlkIdx].blockSizeChange > static_cast<int>(extendedBlockInfo.blockInfo.remainingBits) ||
+                statusExBlks[exBlkIdx].bitWrapperSizeChange > static_cast<int>(extendedBlockInfo.remaining_bits_BW_index) ||
+                statusExBlks[exBlkIdx].payloadSizeChange > static_cast<int>(extendedBlockInfo.blockInfo.remainingPayload)) {
                 return COUNT_SLOT;
             }
-            if (originalBlockSizeChange <= static_cast<int>(originalBlockInfo->remainingBits)) {
+            if (originalBlockSizeChange <= static_cast<int>(originalBlockInfo.remainingBits)) {
                 return slotIdxIt;
             }
         }
@@ -121,10 +130,10 @@ class ExtensionBlock {
     }
     static size_t getLSlotWithSuccessfulExpansionDHT(Block<Traits> &originalBlock, Block<Traits> &targetBlock, const size_t slotIdxSrcBlk) {
         int originalBlockSizeChange = 0;
-        const auto originalBlockInfo = originalBlock.get_block_info();
+        const BlockInfo originalBlockInfo = originalBlock.get_block_info();
         auto statusTargetBlk = StateExtendedBlk();
         for (size_t slotIdxIt = slotIdxSrcBlk; slotIdxIt > 0; slotIdxIt--) {
-            const auto targetBlockInfo = get_extended_block_info_DHT(targetBlock);
+            const ExtendedBlockInfo targetBlockInfo = get_extended_block_info_DHT(targetBlock);
 
             const size_t originalSlotStartIndex = originalBlock.get_lslot_start(slotIdxIt);
             const size_t nextSlotStartIndex = originalBlock.get_lslot_start(slotIdxIt + 1);
@@ -135,11 +144,11 @@ class ExtensionBlock {
             statusTargetBlk.payloadSizeChange += static_cast<int>(tenValue);
             originalBlockSizeChange += static_cast<int>(-slotLength + 1); // -slotLength for the slot and +1 for overflowing bit
 
-            if (statusTargetBlk.blockSizeChange > static_cast<int>(targetBlockInfo->blockInfo->remainingBits) ||
-                statusTargetBlk.payloadSizeChange > static_cast<int>(targetBlockInfo->blockInfo->remainingPayload)) {
+            if (statusTargetBlk.blockSizeChange > static_cast<int>(targetBlockInfo.blockInfo.remainingBits) ||
+                statusTargetBlk.payloadSizeChange > static_cast<int>(targetBlockInfo.blockInfo.remainingPayload)) {
                 return COUNT_SLOT;
             }
-            if (originalBlockSizeChange <= static_cast<int>(originalBlockInfo->remainingBits)) {
+            if (originalBlockSizeChange <= static_cast<int>(originalBlockInfo.remainingBits)) {
                 return slotIdxIt;
             }
         }
@@ -209,6 +218,8 @@ class ExtensionBlock {
             size_t new_lslot_start_index = exBlk.blk.get_lslot_start(actualIndex);
 
             size_t old_payload_index = originalBlk.get_index_start_lslot(curr);
+            auto max_index_ex = exBlk.blk.get_max_index();
+            auto max_index_orig = originalBlk.get_max_index();
 
             exBlk.blk.bits.shift_smart(lslot_len, new_lslot_start_index, N - 1);
             exBlk.blk.bits.set_fast_two_reg(new_lslot_start_index, new_lslot_start_index + lslot_len,
@@ -216,15 +227,15 @@ class ExtensionBlock {
             originalBlk.bits.set_fast_two_reg(lslot_start_index, lslot_start_index + lslot_len, 0);
 
             size_t new_payload_index = exBlk.blk.get_index_start_lslot(actualIndex);
-
-            exBlk.blk.payload_list.shift_right_from_index(new_payload_index, ten);
+            exBlk.blk.payload_list.shift_right_from_index(new_payload_index, ten, max_index_ex);
             for (size_t i = 0; i < ten; i++) {
                 Payload<Traits>::swap(originalBlk.payload_list, old_payload_index + i,
                                                                exBlk.blk.payload_list, new_payload_index + i, age);
             }
-            originalBlk.payload_list.shift_left_from_index(old_payload_index, ten);
+            originalBlk.payload_list.shift_left_from_index(old_payload_index, ten, max_index_orig);
         }
         {
+            // encoding the extended lslot index within the original block
             auto nLOI = last_one_index - (lslotIndexOriginalBlk - tillLSlotIdx + 1);
             originalBlk.bits.set_fast_one_reg(3, 3 * REGISTER_SIZE + nLOI, N, 0);
             originalBlk.bits.set(nLOI, true);
@@ -281,7 +292,7 @@ class ExtensionBlock {
         return true;
     }
     // todo move lslot back to original one
-    std::unique_ptr<WriteReturnInfo> write(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint,
+    WriteReturnInfo write(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint,
                                            SSDLog<Traits> &ssdLog,
                                            const size_t FP_index, const typename Traits::PAYLOAD_TYPE &payload,
                                            const size_t blkIdx, const size_t lslotBefore, const bool guarantee_update = false) {
@@ -293,6 +304,20 @@ class ExtensionBlock {
         return blk.write(cp_fingerprint, ssdLog, FP_index, payload, guarantee_update);
     }
 
+#ifdef ENABLE_XDP
+    WriteReturnInfo writeGI(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint,
+                                           const size_t FP_index, const typename Traits::PAYLOAD_TYPE &payload,
+                                           const size_t blkIdx, const size_t lslotBefore,
+                                             XDP<TraitsGI, TraitsLI, TraitsLIBuffer> *xdp,
+                            const bool guarantee_update = false) {
+        auto sizeAndLSlotsInfo = getNumberOfLSlotsAndSize(blkIdx);
+        auto actualIndex = calculatePhysicalLSlotIndex(blkIdx, lslotBefore);
+        handleExtensionMetaData(blkIdx, lslotBefore, sizeAndLSlotsInfo);
+        auto cp_fingerprint = fingerprint;
+        Block<Traits>::setLSlotIndexInFP(cp_fingerprint, actualIndex, FP_index);
+        return blk.writeGIEx(cp_fingerprint, fingerprint, FP_index, payload, xdp, guarantee_update);
+    }
+#endif
     std::unique_ptr<RemoveReturnInfo> remove(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint,
                                              SSDLog<Traits> &ssdLog, const size_t FP_index, const size_t blkIdx,
                                              const size_t lslotBefore) {
@@ -320,15 +345,21 @@ class ExtensionBlock {
         }
     }
 
-    std::unique_ptr<typename Traits::ENTRY_TYPE> read(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, const SSDLog<Traits> &ssdLog,
+    std::optional<typename Traits::ENTRY_TYPE> read(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, const SSDLog<Traits> &ssdLog,
                                      const size_t FP_index, const size_t blkIdx, const size_t lslotBefore) {
         auto actualIndex = calculatePhysicalLSlotIndex(blkIdx, lslotBefore);
         auto cp_fingerprint = fingerprint;
         Block<Traits>::setLSlotIndexInFP(cp_fingerprint, actualIndex, FP_index);
         return blk.read(cp_fingerprint, ssdLog, FP_index);
     }
-
-    std::unique_ptr<typename Traits::ENTRY_TYPE> readDHT(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, const SSDLog<Traits> &ssdLog,
+    auto read_payload(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint,
+                                     const size_t FP_index, const size_t blkIdx, const size_t lslotBefore) {
+        auto actualIndex = calculatePhysicalLSlotIndex(blkIdx, lslotBefore);
+        auto cp_fingerprint = fingerprint;
+        Block<Traits>::setLSlotIndexInFP(cp_fingerprint, actualIndex, FP_index);
+        return blk.read_payload(cp_fingerprint, FP_index);
+    }
+    std::optional<typename Traits::ENTRY_TYPE> readDHT(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, const SSDLog<Traits> &ssdLog,
                                                       const size_t FP_index, const size_t blkIdx, const size_t lslotBefore) {
         auto actualIndex = calculatePhysicalLSlotIndex(blkIdx, lslotBefore);
         auto cp_fingerprint = fingerprint;

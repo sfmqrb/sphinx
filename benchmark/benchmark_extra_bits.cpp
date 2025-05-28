@@ -4,10 +4,12 @@
 #include <cmath>
 #include <filesystem>  // For directory creation (C++17)
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <random>
 #include <utility>  // For std::pair
 #include <vector>
+#include <set>
 
 #include "../directory/directory.h"
 #include "../lib/memento/memento.hpp"
@@ -27,6 +29,7 @@ constexpr size_t APPEND_ONLY_LOG_SIZE = 2000000;
 constexpr size_t INIT_SIZE = 1ull << INIT_SIZE_LOG;
 constexpr size_t NUM_KEYS_TOTAL = static_cast<size_t>(0.94 * INIT_SIZE * (1 << RSQF_STATIC_FP_SIZE));
 constexpr auto SIZE_KEY_INFINI_LOG = MAX_INFINI_EXP + INIT_SIZE_LOG;
+constexpr float ratio_exs_read = 0.75; 
 
 std::mt19937 gen(12345);  // Mersenne Twister random number generator
 
@@ -34,6 +37,18 @@ std::mt19937 gen(12345);  // Mersenne Twister random number generator
 inline size_t get_random_key(size_t min, size_t max) {
     std::uniform_int_distribution<size_t> dist(min, max);
     return dist(gen);
+}
+
+std::pair<size_t, size_t> get_half(size_t small, size_t big) {
+    auto big_min_po2 = floor(std::log2(big));
+    auto big_biggest_po2 = static_cast<size_t>(std::pow(2, big_min_po2));
+    auto small_min_po2 = floor(std::log2(small));
+    auto small_biggest_po2 = static_cast<size_t>(std::pow(2, small_min_po2));
+
+    if (big_biggest_po2 == small_biggest_po2) {
+        return {small - small_biggest_po2, big - big_biggest_po2};
+    }
+    return {0, big - big_biggest_po2};
 }
 
 template <typename T>
@@ -56,6 +71,14 @@ std::vector<size_t> generate_random_keys(size_t min, size_t max, size_t count) {
         keys.push_back(get_random_key(min, max));
     }
     return keys;
+}
+
+std::vector<size_t> generate_unique_random_keys(size_t min, size_t max, size_t count) {
+    std::set<size_t> unique_keys;
+    while (unique_keys.size() < count) {
+        unique_keys.insert(get_random_key(min, max));
+    }
+    return std::vector<size_t>(unique_keys.begin(), unique_keys.end());
 }
 
 template <typename Traits>
@@ -96,6 +119,7 @@ void readFilter(const memento::Memento<Traits::IS_INFINI>& filter, const SSDLog<
         ssdLog.read(r, entry_type);
         if (entry_type.key == selectedKey) {
             flag = true;
+            break;
         }
     }
     if (!flag) {
@@ -142,7 +166,7 @@ double get_memory_filter(memento::Memento<Traits::IS_INFINI>& filter) { return s
 // Helper function: returns true when the logarithm of the current step
 // crosses a new 0.1 interval. This ensures more frequent sampling in the beginning.
 bool should_sample(size_t step) {
-    std::cout << "Step: " << step << std::endl;
+//    std::cout << "Step: " << step << std::endl;
     if (step == 1)
         return true;
     if (step < 100000)
@@ -164,6 +188,7 @@ auto RunFilter(
     const std::string& folder) -> void {
     Metrics metrics;
     size_t current_key = 0;
+    size_t prev_sample_key = 0;
 
     // Loop until we have done all the writes.
     while (current_key < total_writes) {
@@ -187,8 +212,14 @@ auto RunFilter(
         std::vector<size_t> tail_exs_read;
         if (should_sample(current_key)) {
             std::vector<size_t> latency_values;
-            auto existent_keys = generate_random_keys(1, current_key, BATCH_SIZE);
-            for (auto key : existent_keys) {
+            auto pairs = get_half(prev_sample_key, current_key);
+            prev_sample_key = current_key;
+            auto left = pairs.first;
+            auto right = pairs.second;
+            size_t sampling_size = (right - left) * ratio_exs_read;
+            auto random_keys = generate_unique_random_keys(left, right, sampling_size);
+
+            for (auto key : random_keys) {
                 auto start_read = std::chrono::high_resolution_clock::now();
                 readFilter<Traits>(filter, ssdLog, key);
                 auto end_read = std::chrono::high_resolution_clock::now();
@@ -231,6 +262,7 @@ auto RunFilter(
         }
 
         if (should_sample(current_key)) {
+            std::cout << "Current key: " << current_key << std::endl;
             double memory_footprint = get_memory_filter<Traits>(filter) / current_key;
             metrics.record("insertion_time", avg_insertion_latency);
             metrics.record("tail-99", tail_exs_read[0]);
@@ -263,6 +295,7 @@ template <typename Traits>
 void Run(Directory<Traits>& dir, SSDLog<Traits>& ssdLog, size_t total_writes, const std::string& folder) {
     Metrics metrics;
     size_t current_key = 0;
+    size_t prev_sample_key = 0;
 
     // Loop until we have done all the writes.
     while (current_key < total_writes) {
@@ -286,8 +319,15 @@ void Run(Directory<Traits>& dir, SSDLog<Traits>& ssdLog, size_t total_writes, co
         std::vector<size_t> tail_exs_read;
         if (should_sample(current_key)) {
             std::vector<size_t> latency_values;
-            auto existent_keys = generate_random_keys(1, current_key, BATCH_SIZE);
-            for (auto key : existent_keys) {
+
+            auto pairs = get_half(prev_sample_key, current_key);
+            prev_sample_key = current_key;
+            auto left = pairs.first;
+            auto right = pairs.second;
+            size_t sampling_size = (right - left) * ratio_exs_read;
+            auto random_keys = generate_unique_random_keys(left, right, sampling_size);
+
+            for (auto key : random_keys) {
                 auto start_read = std::chrono::high_resolution_clock::now();
                 auto res = dir.readSegmentSingleThread(key, ssdLog);
                 auto end_read = std::chrono::high_resolution_clock::now();
@@ -330,6 +370,9 @@ void Run(Directory<Traits>& dir, SSDLog<Traits>& ssdLog, size_t total_writes, co
         }
 
         if (should_sample(current_key)) {
+            std::cout << "Current key: " << current_key << std::endl;
+            // auto average_age = dir.get_average_age();
+            // std::cout << "Average age: " << average_age << std::endl;
             metrics.record("insertion_time", avg_insertion_latency);
             metrics.record("tail-99", tail_exs_read[0]);
             metrics.record("tail-99-non-exs", tail_non_exs_read[0]);
@@ -390,7 +433,7 @@ void performTestFilterInfini(const std::string& ssdLogPath, const std::string& f
 int main() {
     // Define a vector of configurations (folder for output and SSD log file path)
     std::vector<std::pair<std::string, std::string>> configs = {
-        {HOME + "/research/dht/benchmark/data-extra-bits", "/data/fleck/directory_test_3.txt"},
+        {HOME + "/research/sphinx-review/benchmark/data-extra-bits", "/data/fleck/directory_test_3.txt"},
     };
 
     // Iterate over each configuration folder
@@ -401,9 +444,9 @@ int main() {
         // Create the directory (and any necessary parent directories)
         std::filesystem::create_directories(dataFolder);
 
-        #ifdef IN_MEMORY_FILE
-        throw std::invalid_argument("This benchmark is not compatible with IN_MEMORY_FILE");
-        #endif
+        // #ifdef IN_MEMORY_FILE
+        // throw std::invalid_argument("This benchmark is not compatible with IN_MEMORY_FILE");
+        // #endif
         // Run the test for all configuration types
         performTestFilterInfini(ssdLogPath, dataFolder);
         performTest<TestFleckInMemoryExtraBits1>(ssdLogPath, dataFolder);

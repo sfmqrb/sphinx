@@ -386,10 +386,7 @@ void performTestPHT() {
 }
 
 int main() {
-#ifndef IN_MEMORY_FILE
-    throw std::invalid_argument("Error: IN_MEMORY_FILE not defined");
-#endif
-    std::string dataFolder = HOME + "/research/dht/benchmark/data-lf";
+    std::string dataFolder = HOME + "/research/sphinx-review/benchmark/data-lf";
     std::filesystem::create_directories(dataFolder);
     // ===============================================================
     std::cout << " Test Perfect HT\n";

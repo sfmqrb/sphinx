@@ -151,7 +151,7 @@ TEST_CASE("Block: write test for fingerprint with specific pattern") {
             PAYLOAD_TYPE pt = ssdLog->write(key, value);
             auto hash_val = Hashing<TestDefaultTraits>::hash_digest(key);
             auto info = block.write(hash_val, *ssdLog.get(), FP_size, pt);
-            CHECK(info->rs == WriteReturnStatusSuccessful);
+            CHECK(info.rs == WriteReturnStatusSuccessful);
             CHECK(block.read(hash_val, *ssdLog.get(), FP_size)->key == key);
         }
         const auto key = static_cast<KEY_TYPE>(getFP(COUNT_SLOT - 1, 0, 0, FP_size, fps[1]));
@@ -159,9 +159,9 @@ TEST_CASE("Block: write test for fingerprint with specific pattern") {
         PAYLOAD_TYPE pt = ssdLog->write(key, value);
         auto hash_val = Hashing<TestDefaultTraits>::hash_digest(key);
         auto info = block.write(hash_val, *ssdLog.get(), FP_size, pt);
-        CHECK(info->rs == WriteReturnStatusNotEnoughPayloadSpace);
-        CHECK(info->blockInfo->isExtended == false);
-        CHECK(info->blockInfo->firstExtendedLSlot == COUNT_SLOT);
+        CHECK(info.rs == WriteReturnStatusNotEnoughPayloadSpace);
+        CHECK(info.blockInfo.isExtended == false);
+        CHECK(info.blockInfo.firstExtendedLSlot == COUNT_SLOT);
     }
 }
 
@@ -298,10 +298,10 @@ TEST_CASE("Block: simple remove") {
             PAYLOAD_TYPE pt = ssdLog->write(key, value);
             auto hash_val = Hashing<TestDefaultTraits>::hash_digest(key);
             auto info = block.write(hash_val, *ssdLog.get(), FP_size, pt);
-            CHECK(info->rs == expected_return_status[i]);
-            CHECK(info->blockInfo->isExtended == false);
-            CHECK(info->blockInfo->firstExtendedLSlot == COUNT_SLOT);
-            CHECK(info->blockInfo->remainingBits == remaining_bits[i]);
+            CHECK(info.rs == expected_return_status[i]);
+            CHECK(info.blockInfo.isExtended == false);
+            CHECK(info.blockInfo.firstExtendedLSlot == COUNT_SLOT);
+            CHECK(info.blockInfo.remainingBits == remaining_bits[i]);
 
             if (expected_return_status[i] == WriteReturnStatusSuccessful) {
                 CHECK(block.read(hash_val, *ssdLog.get(), FP_size)->key == key);

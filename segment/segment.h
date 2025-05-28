@@ -8,6 +8,18 @@
 #define CALCULATE_NEW_LSLOT_IDX(oldLslotIdx, firstBit) \
     ((oldLslotIdx / 2) + (COUNT_SLOT / 2) * firstBit)
 
+
+#ifdef ENABLE_XDP
+// Forward‐declare the template so we can hold pointers to it
+template <
+  typename TraitsGI, 
+  typename TraitsLI, 
+  typename TraitsLIBuffer
+>
+class XDP;
+#endif
+
+
 template <typename Traits = DefaultTraits>
 class Segment {
     typedef typename Traits::PAYLOAD_TYPE PAYLOAD_TYPE;
@@ -40,6 +52,23 @@ class Segment {
             ptrsExBlks = nullptr;          // Only store a null pointer
         }
     }
+
+    std::shared_ptr<Segment<TraitsLI>> replicate() {
+        auto seg = std::make_shared<Segment<TraitsLI>>(FP_index);
+        for (size_t i = 0; i < COUNT_SLOT; ++i) {
+            seg->blockList[i].bits = blockList[i].bits.replicateTrieStore();
+            assert(seg->blockList[i].bits.getInputString() == blockList[i].bits.getInputString());
+        }
+        if constexpr (!Traits::DHT_EVERYTHING) {
+            for (size_t i = 0; i < Traits::SEGMENT_EXTENSION_BLOCK_SIZE; ++i) {
+                seg->extensionBlockList[i].blk.bits = extensionBlockList[i].blk.bits.replicateTrieStore();
+                assert(seg->extensionBlockList[i].blk.bits.getInputString() == extensionBlockList[i].blk.bits.getInputString());
+                seg->extensionBlockList[i].lslotSizesBW = extensionBlockList[i].lslotSizesBW.replicateTrieStore();
+                assert(seg->extensionBlockList[i].lslotSizesBW.getInputString() == extensionBlockList[i].lslotSizesBW.getInputString());
+            }
+        }
+        return seg;
+    }
     bool write(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint,
                                                      SSDLog<Traits> &ssdLog,
                                                      const PAYLOAD_TYPE &payload,
@@ -48,12 +77,12 @@ class Segment {
         size_t blkIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS * 2, FP_index - COUNT_SLOT_BITS);
         auto blk = &blockList[blkIdx];
 
-        auto blkInfo = blk->write(fingerprint, ssdLog, FP_index, payload, guarantee_update);
+        WriteReturnInfo write_return_info = blk->write(fingerprint, ssdLog, FP_index, payload, guarantee_update);
         const size_t lslotIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS, FP_index);
 
         // handle different outcomes
         auto res = true;
-        switch (blkInfo->rs) {
+        switch (write_return_info.rs) {
             case WriteReturnStatusSuccessful: {
                 break;
             }
@@ -83,21 +112,20 @@ class Segment {
                     const size_t lslotBefore = ExtensionBlock<Traits>::CALCULATE_LSLOT_BEFORE(lslotIdx);
                     const auto exBlkIdx = ExtensionBlock<Traits>::CALCULATE_EXTENDED_BLOCK_INDEX(blkIdx, lslotIdx);
                     auto exBlk = &extensionBlockList[exBlkIdx];
-                    const auto exInfo = exBlk->write(fingerprint, ssdLog, FP_index, payload, blkIdx, lslotBefore, guarantee_update);
-                    if (exInfo->rs == WriteReturnStatusSuccessful) {
+                    const WriteReturnInfo exInfo = exBlk->write(fingerprint, ssdLog, FP_index, payload, blkIdx, lslotBefore, guarantee_update);
+                    if (exInfo.rs == WriteReturnStatusSuccessful) {
                         break;
                     } else if (guarantee_update) {
                         throw std::invalid_argument("not a valid update - not enough space - in segment - cond lslot extended");
                     }
 
                 } else {
-                    size_t actualIndex = lslotIdx - blk->get_block_info()->firstExtendedLSlot;
+                    size_t actualIndex = lslotIdx - blk->get_block_info().firstExtendedLSlot;
                     auto cp_fingerprint = fingerprint;
                     Block<Traits>::setLSlotIndexInFP(cp_fingerprint, actualIndex, FP_index);
-                    const auto res = ptrsExBlks[blkIdx]->write(cp_fingerprint, ssdLog, FP_index, payload);
-                    if (res->rs == WriteReturnStatusSuccessful) {
+                    const WriteReturnInfo res_tmp = ptrsExBlks[blkIdx]->write(cp_fingerprint, ssdLog, FP_index, payload);
+                    if (res_tmp.rs == WriteReturnStatusSuccessful)
                         break;
-                    }
                 }
                 // chnage ten in the orignial block
                 // or not :)
@@ -109,6 +137,67 @@ class Segment {
         }
         return res;
     }
+
+#ifdef ENABLE_XDP
+    bool writeGI(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint,
+                                                     const PAYLOAD_TYPE &payload,
+                                                     XDP<TraitsGI, TraitsLI, TraitsLIBuffer> *xdp,
+                                                     const bool guarantee_update = false) {
+    SEGMENT_WRITE_START:
+        size_t blkIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS * 2, FP_index - COUNT_SLOT_BITS);
+        auto blk = &blockList[blkIdx];
+
+        WriteReturnInfo write_return_info = blk->writeGI(fingerprint, FP_index, payload, xdp, guarantee_update);
+        const size_t lslotIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS, FP_index);
+
+        // handle different outcomes
+        auto res = true;
+        switch (write_return_info.rs) {
+            case WriteReturnStatusSuccessful: {
+                break;
+            }
+            case WriteReturnStatusNotEnoughPayloadSpace:
+            case WriteReturnStatusNotEnoughBlockSpace: {
+                // std::cout << "1\n";
+                size_t lastLslot = blk->get_last_lslot_idx();
+                bool status;
+                if constexpr (!Traits::DHT_EVERYTHING) {
+                    status = ExtensionBlock<Traits>::moveLSlotsToMakeSpace(*blk, lastLslot, blkIdx, extensionBlockList.get());
+                } else {
+                    if (!ptrsExBlks[blkIdx]) {
+                        ptrsExBlks[blkIdx] = std::make_unique<Block<Traits>>();
+                    }
+                    status = ExtensionBlock<Traits>::moveLSlotsToMakeSpaceDHT(*blk, *ptrsExBlks[blkIdx], lastLslot);
+                }
+                if (!status) {
+                    res = false;
+                    break;
+                }
+                res = writeGI(fingerprint, payload, xdp, guarantee_update);
+                break;
+            }
+            case WriteReturnStatusLslotExtended: {
+                // std::cout << "2\n";
+                if constexpr (!Traits::DHT_EVERYTHING) {
+                    const size_t lslotBefore = ExtensionBlock<Traits>::CALCULATE_LSLOT_BEFORE(lslotIdx);
+                    const auto exBlkIdx = ExtensionBlock<Traits>::CALCULATE_EXTENDED_BLOCK_INDEX(blkIdx, lslotIdx);
+                    auto exBlk = &extensionBlockList[exBlkIdx];
+                    const WriteReturnInfo exInfo = exBlk->writeGI(fingerprint, FP_index, payload, blkIdx, lslotBefore, xdp, guarantee_update);
+                    if (exInfo.rs == WriteReturnStatusSuccessful)
+                        break;
+                    else if (guarantee_update)
+                        throw std::invalid_argument("not a valid update - not enough space - in segment - cond lslot extended");
+                } else
+                    throw std::invalid_argument("not implemented for DHT_EVERYTHING");
+                res = false;
+                break;
+            }
+            default:
+                throw std::invalid_argument("should not be here, switch case in segment didn't handle all possibilities!\n");
+        }
+        return res;
+    }
+#endif
     bool remove(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, SSDLog<Traits> &ssdLog) {
         size_t blkIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS * 2, FP_index - COUNT_SLOT_BITS);
         auto blk = &blockList[blkIdx];
@@ -139,30 +228,29 @@ class Segment {
         }
         return res;
     }
-    std::unique_ptr<ENTRY_TYPE> read(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, const SSDLog<Traits> &ssdLog) const {
+    std::optional<ENTRY_TYPE> read(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, const SSDLog<Traits> &ssdLog) const {
         const size_t blkIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS * 2, FP_index - COUNT_SLOT_BITS);
         auto blk = &blockList[blkIdx];
-        const auto blkInfo = blk->get_block_info();
+        const BlockInfo blkInfo = blk->get_block_info();
         const size_t lslotIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS, FP_index);
         const auto exBlkIdx = ExtensionBlock<Traits>::CALCULATE_EXTENDED_BLOCK_INDEX(blkIdx, lslotIdx);
         const auto exBlk = &extensionBlockList[exBlkIdx];
 
-        std::unique_ptr<ENTRY_TYPE> res;
-//        auto start_time = std::chrono::high_resolution_clock::now();
+        std::optional<ENTRY_TYPE> res;
         if constexpr (Traits::DHT_EVERYTHING) {
-             if (blkInfo->firstExtendedLSlot > lslotIdx) {
+             if (blkInfo.firstExtendedLSlot > lslotIdx) {
                 res = blk->readDHT(fingerprint, ssdLog, FP_index);
             } else {
-                size_t actualIndex = lslotIdx - blk->get_block_info()->firstExtendedLSlot;
+                size_t actualIndex = lslotIdx - blk->get_block_info().firstExtendedLSlot;
                 auto cp_fingerprint_1 = fingerprint;
-                Block<Traits>::setLSlotIndexInFP(cp_fingerprint_1, blk->get_block_info()->firstExtendedLSlot - 1, FP_index);
+                Block<Traits>::setLSlotIndexInFP(cp_fingerprint_1, blk->get_block_info().firstExtendedLSlot - 1, FP_index);
                 volatile auto r = blk->readDHT(cp_fingerprint_1, ssdLog, FP_index, true);
                 auto cp_fingerprint = fingerprint;
                 Block<Traits>::setLSlotIndexInFP(cp_fingerprint, actualIndex, FP_index);
                 return ptrsExBlks[blkIdx]->readDHT(cp_fingerprint, ssdLog, FP_index);
             }
         } else {
-            if (blkInfo->firstExtendedLSlot > lslotIdx) {
+            if (blkInfo.firstExtendedLSlot > lslotIdx) {
                 if (Traits::READ_OFF_STRATEGY == 0)
                     res = blk->read(fingerprint, ssdLog, FP_index);
                 if (Traits::READ_OFF_STRATEGY == 20) {
@@ -176,22 +264,44 @@ class Segment {
                 }
             }
         }
-//        auto end_time = std::chrono::high_resolution_clock::now();
-//        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time).count();
-//        std::cout << "Read time: " << duration << " ns" << std::endl;
         return res;
     }
+    size_t read_payload(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint) const {
+        const size_t blkIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS * 2, FP_index - COUNT_SLOT_BITS);
+        auto blk = &blockList[blkIdx];
+        const BlockInfo blkInfo = blk->get_block_info();
+        const size_t lslotIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS, FP_index);
+        const auto exBlkIdx = ExtensionBlock<Traits>::CALCULATE_EXTENDED_BLOCK_INDEX(blkIdx, lslotIdx);
+        const auto exBlk = &extensionBlockList[exBlkIdx];
 
+        if constexpr (Traits::DHT_EVERYTHING) {
+            throw std::invalid_argument("DHT everything not supproted for this!\n"); 
+        } else {
+            if (blkInfo.firstExtendedLSlot > lslotIdx) {
+                if (Traits::READ_OFF_STRATEGY == 0)
+                    return blk->read_payload(fingerprint, FP_index);
+                if (Traits::READ_OFF_STRATEGY == 20) {
+                    throw std::invalid_argument("dht expand not supproted for this!\n");
+                }
+            } else {
+                if (Traits::READ_OFF_STRATEGY == 0)
+                    return exBlk->read_payload(fingerprint, FP_index, blkIdx, ExtensionBlock<Traits>::CALCULATE_LSLOT_BEFORE(lslotIdx));
+                if (Traits::READ_OFF_STRATEGY == 20) {
+                    throw std::invalid_argument("dht expand not supproted for this!\n");
+                }
+            }
+        }
+    }
     auto readOffset(BitsetWrapper<FINGERPRINT_SIZE> &fingerprint) const {
         const size_t blkIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS * 2, FP_index - COUNT_SLOT_BITS);
         auto blk = &blockList[blkIdx];
-        const auto blkInfo = blk->get_block_info();
+        const BlockInfo blkInfo = blk->get_block_info();
         const size_t lslotIdx = fingerprint.range_fast_one_reg(0, FP_index - COUNT_SLOT_BITS, FP_index);
         const auto exBlkIdx = ExtensionBlock<Traits>::CALCULATE_EXTENDED_BLOCK_INDEX(blkIdx, lslotIdx);
         const auto exBlk = &extensionBlockList[exBlkIdx];
 
         std::unique_ptr<ENTRY_TYPE> res;
-        if (blkInfo->firstExtendedLSlot > lslotIdx) {
+        if (blkInfo.firstExtendedLSlot > lslotIdx) {
             if (Traits::READ_OFF_STRATEGY == 0)
                 return blk->get_index(fingerprint, FP_index);
             else if (Traits::READ_OFF_STRATEGY == 2)
@@ -257,6 +367,37 @@ class Segment {
         fill_segment(*seg2, *exp_seg2);
         return std::make_pair(seg1, seg2);
     }
+#ifdef ENABLE_XDP
+    auto get_expanded_seg_gi(XDP<TraitsGI, TraitsLI, TraitsLIBuffer> *xdp,
+                            BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, size_t segmentCountLog) {
+        auto exp_seg1 = std::make_unique<ExpandedSegment>();
+        auto exp_seg2 = std::make_unique<ExpandedSegment>();
+        //        std::cout << sizeof(*exp_seg1) << " sizes" << std::endl;
+        for (size_t i = 0; i < COUNT_SLOT; ++i) {
+            expand_gi(*exp_seg1, *exp_seg2, i, xdp, fingerprint, segmentCountLog);
+        }
+        // exp_seg1->print();
+        // exp_seg2->print();
+        // std::cout << exp_seg1->get_count() << "  " << exp_seg2->get_count() << std::endl;
+        return std::make_pair(std::move(exp_seg1), std::move(exp_seg2));
+    }
+
+    std::pair<std::shared_ptr<Segment>, std::shared_ptr<Segment>> expand_gi(XDP<TraitsGI, TraitsLI, TraitsLIBuffer> *xdp,
+                                                                            BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, 
+                                                                            size_t segmentCountLog) {
+        if constexpr (Traits::DHT_EVERYTHING) {
+            throw std::invalid_argument("not implemented for DHT_EVERYTHING");
+        }
+        auto seg1 = std::make_shared<Segment>(FP_index + 1);
+        auto seg2 = std::make_shared<Segment>(FP_index + 1);
+
+        auto [exp_seg1, exp_seg2] = get_expanded_seg_gi(xdp, fingerprint, segmentCountLog);
+        // blockList[0].print();
+        fill_segment(*seg1, *exp_seg1);
+        fill_segment(*seg2, *exp_seg2);
+        return std::make_pair(seg1, seg2);
+    }
+#endif
 
     auto get_org_blk_payload_start_and_ten(const ExpandedBlock &exp_blk, const size_t j) const {
         const auto &lslot = exp_blk.lslots[j];
@@ -337,9 +478,65 @@ class Segment {
         }
         return lslot_num;
     }
+
+#ifdef ENABLE_XDP
+    void expand_gi(ExpandedSegment &s1, ExpandedSegment &s2,
+                   size_t blkIdx, XDP<TraitsGI, TraitsLI, TraitsLIBuffer> *xdp,
+                   BitsetWrapper<FINGERPRINT_SIZE> &fingerprint, size_t segmentCountLog) {
+        auto &blk = blockList[blkIdx];
+        const BlockInfo blkInfo = blk.get_block_info();
+
+        auto fp2 = fingerprint;
+        fp2.set_fast_one_reg(0, FP_index - 12, FP_index - 6, blkIdx);
+
+        ExpandedSegment &newSeg = blkIdx % 2 == 0 ? s1 : s2;
+        for (size_t lslotIdx = 0; lslotIdx < COUNT_SLOT; ++lslotIdx) {
+            fp2.set_fast_one_reg(0, FP_index - 6, FP_index, lslotIdx);
+            const auto extendedOldBlkIdx = ExtensionBlock<Traits>::CALCULATE_EXTENDED_BLOCK_INDEX(blkIdx, lslotIdx);
+            auto &exBlk = extensionBlockList[extendedOldBlkIdx];
+            const size_t newBlkIdx = CALCULATE_NEW_BLOCK_IDX(blkIdx, lslotIdx);
+            const size_t newLSlotIdx0 = CALCULATE_NEW_LSLOT_IDX(lslotIdx, 0);
+            const size_t newLSlotIdx1 = CALCULATE_NEW_LSLOT_IDX(lslotIdx, 1);
+
+            size_t physical_lslot_idx;
+            Block<Traits> &physical_block = blkInfo.firstExtendedLSlot > lslotIdx ? blk : exBlk.blk;
+            bool wasExtended = false;
+            if (blkInfo.firstExtendedLSlot > lslotIdx) {
+                physical_lslot_idx = lslotIdx;
+            } else {
+                physical_lslot_idx = exBlk.calculatePhysicalLSlotIndex(blkIdx, ExtensionBlock<Traits>::CALCULATE_LSLOT_BEFORE(lslotIdx));
+                wasExtended = true;
+            }
+            size_t start_lslot_index = physical_block.get_lslot_start(physical_lslot_idx);
+            auto [payload_start_index, tenOld] = physical_block.getTenBeforeAndTen(physical_lslot_idx);
+            BST<N> bst(tenOld, start_lslot_index, FP_index);
+            bst.createBST(physical_block.bits);
+            auto &exp_lslot0 = newSeg.blocks[newBlkIdx].lslots[newLSlotIdx0];
+            auto &exp_lslot1 = newSeg.blocks[newBlkIdx].lslots[newLSlotIdx1];
+            if (tenOld == 0) {
+                exp_lslot0.set(0, blkIdx, lslotIdx, Traits::PAYLOADS_LENGTH, wasExtended, bst.getBitRepWrapper());
+                exp_lslot1.set(0, blkIdx, lslotIdx, Traits::PAYLOADS_LENGTH, wasExtended, bst.getBitRepWrapper());
+            } else {
+                const size_t count_zero_start = physical_block.get_count_zero_start_gi(bst, payload_start_index, xdp, fp2);
+                BST<REGISTER_SIZE> bst_new0(count_zero_start, N, FP_index + 1);
+                BST<REGISTER_SIZE> bst_new1(tenOld - count_zero_start, N, FP_index + 1);
+                if (count_zero_start < tenOld && count_zero_start > 0) {
+                    bst_new0.root = std::move(bst.root->left);
+                    bst_new1.root = std::move(bst.root->right);
+                } else if (count_zero_start == 0) {
+                    bst_new1.root = std::move(bst.root);
+                } else if (count_zero_start == tenOld) {
+                    bst_new0.root = std::move(bst.root);
+                }
+                exp_lslot0.set(count_zero_start, blkIdx, lslotIdx, payload_start_index, wasExtended, bst_new0.getBitRepWrapper());
+                exp_lslot1.set(tenOld - count_zero_start, blkIdx, lslotIdx, payload_start_index + count_zero_start, wasExtended, bst_new1.getBitRepWrapper());
+            }
+        }
+    }
+#endif
     void expand(SSDLog<Traits> &ssdLog, ExpandedSegment &s1, ExpandedSegment &s2, size_t blkIdx) {
         auto &blk = blockList[blkIdx];
-        const auto blkInfo = blk.get_block_info();
+        const BlockInfo blkInfo = blk.get_block_info();
 
         ExpandedSegment &newSeg = blkIdx % 2 == 0 ? s1 : s2;
         for (size_t lslotIdx = 0; lslotIdx < COUNT_SLOT; ++lslotIdx) {
@@ -350,9 +547,9 @@ class Segment {
             const size_t newLSlotIdx1 = CALCULATE_NEW_LSLOT_IDX(lslotIdx, 1);
 
             size_t physical_lslot_idx;
-            Block<Traits> &physical_block = blkInfo->firstExtendedLSlot > lslotIdx ? blk : exBlk.blk;
+            Block<Traits> &physical_block = blkInfo.firstExtendedLSlot > lslotIdx ? blk : exBlk.blk;
             bool wasExtended = false;
-            if (blkInfo->firstExtendedLSlot > lslotIdx) {
+            if (blkInfo.firstExtendedLSlot > lslotIdx) {
                 physical_lslot_idx = lslotIdx;
             } else {
                 physical_lslot_idx = exBlk.calculatePhysicalLSlotIndex(blkIdx, ExtensionBlock<Traits>::CALCULATE_LSLOT_BEFORE(lslotIdx));
@@ -388,19 +585,19 @@ class Segment {
     size_t get_ten_all() const {
         size_t sum = 0;
         for (auto i = 0; i < COUNT_SLOT; i++) {
-            if (const auto a = blockList[i].payload_list.get_max_index(); a >= 0)
+            if (const auto a = blockList[i].get_max_index(); a >= 0)
                 sum += static_cast<size_t>(a + 1);
         }
         if constexpr (!Traits::DHT_EVERYTHING) {
             for (auto i = 0; i < Traits::SEGMENT_EXTENSION_BLOCK_SIZE; i++) {
-                if (const auto a = extensionBlockList[i].blk.payload_list.get_max_index(); a >= 0)
+                if (const auto a = extensionBlockList[i].blk.get_max_index(); a >= 0)
                     sum += static_cast<size_t>(a + 1);
             }
         }
         if constexpr (Traits::DHT_EVERYTHING) {
             for (auto i = 0; i < COUNT_SLOT; i++) {
                 if (ptrsExBlks[i]) {
-                    sum += ptrsExBlks[i]->payload_list.get_max_index() + 1;
+                    sum += ptrsExBlks[i]->get_max_index() + 1;
                 }
             }
         }
@@ -461,6 +658,25 @@ class Segment {
         return memory;
     }
 
+    float get_average_age() {
+        float sum = 0;
+        float count = 0;
+        for (size_t i = 0; i < COUNT_SLOT; i++) {
+            sum += blockList[i].get_average_age();
+            count++;
+        }
+        if constexpr (!Traits::DHT_EVERYTHING) {
+            for (size_t i = 0; i < Traits::SEGMENT_EXTENSION_BLOCK_SIZE; i++) {
+                sum += extensionBlockList[i].blk.get_average_age();
+                count++;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return sum / count;
+    }
+
     void printExtension() const {
         std::cout << "printing extension part of the segment\n";
         for (auto i = 0; i < Traits::SEGMENT_EXTENSION_BLOCK_SIZE; i++) {
@@ -468,4 +684,5 @@ class Segment {
             extensionBlockList[i].print();
         }
     }
+
 };

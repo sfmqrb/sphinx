@@ -14,7 +14,9 @@ set(CMAKE_BUILD_RPATH /usr/local/gcc-14.1.0/lib64)
 # Compiler flags interface
 add_library(project_compiler_flags INTERFACE)
 set_target_properties(project_compiler_flags PROPERTIES LINKER_LANGUAGE CXX)
-
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(DEBUG)
+endif()
 # Add the GCC and G++ compiler settings to the interface
 target_compile_options(project_compiler_flags INTERFACE
     $<$<COMPILE_LANG_AND_ID:CXX,GNU>: -std=c++23>
@@ -32,10 +34,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU,LCC>")
 set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 target_compile_options(project_compiler_flags INTERFACE
-        "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-Winline;-Wshadow;-Wformat=2;-Wunused;-O3>>"
+        "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-Wno-inline;-Wno-array-bounds;-Wshadow;-Wformat=2;-Wunused;-O3>>"
         "$<${msvc_cxx}:$<BUILD_INTERFACE:-W3>>"
 )
-#         "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-Winline;-Wshadow;-Wformat=2;-Wunused;-O3>>"
+#         "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-Winline;-Wshadow;-Wformat=2;-Wunused;-O3;-g;-fno-omit-frame-pointer>>"
 add_compile_options(-mbmi2 -march=native)
 
 # Setup Catch2, our unit testing framework
@@ -45,6 +47,7 @@ add_subdirectory(lib/Catch2)
 add_subdirectory(lib/xxhash)
 add_subdirectory(lib/ConQueue)
 add_subdirectory(lib/memento)
+add_subdirectory(lib/zipfYCSB)
 
 # Enable testing
 include(CTest)
@@ -64,3 +67,4 @@ add_subdirectory(directory)
 add_subdirectory(fingerprint_gen_helper)
 add_subdirectory(segment)
 add_subdirectory(buffer_pool2)
+add_subdirectory(xdp)

@@ -176,6 +176,16 @@ private:
         metrics["delete_time"] = std::vector<double>();
         metrics["FPR"] = std::vector<double>();
         metrics["memory"] = std::vector<double>();
+        metrics["memory_including_ptr"] = std::vector<double>();
+
+        metrics["ptr_local"] = std::vector<double>();
+        metrics["ptr_global"] = std::vector<double>();
+        metrics["ptr_buffer"] = std::vector<double>();
+
+        metrics["index_local"] = std::vector<double>();
+        metrics["index_global"] = std::vector<double>();
+        metrics["index_buffer"] = std::vector<double>();
+
         metrics["expansion"] = std::vector<double>();
         metrics["background_deletes"] = std::vector<double>();
         metrics["avg_run_length"] = std::vector<double>();
@@ -184,10 +194,12 @@ private:
         metrics["tail-99"] = std::vector<double>();
         metrics["tail-99-q"] = std::vector<double>();
         metrics["tail-99-u"] = std::vector<double>();
+        metrics["tail-99-i"] = std::vector<double>();
         metrics["tail-99.9"] = std::vector<double>();
         metrics["tail-99.9-u"] = std::vector<double>();
         metrics["tail-99.9-q"] = std::vector<double>();
         metrics["tail-99.99"] = std::vector<double>();
         metrics["tail-99-non-exs"] = std::vector<double>();
+        metrics["ops/sec"] = std::vector<double>();
     }
 };

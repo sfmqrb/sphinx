@@ -1,10 +1,9 @@
 #pragma once
-#include <algorithm>
 #include <cassert>
+#include <array>
 #include <iostream>
 #include <memory>
 #include <utility>
-
 #include "../bitset_wrapper/bitset_wrapper.h"
 #include "../config/config.h"
 
@@ -14,11 +13,7 @@ struct Node {
     std::unique_ptr<Node> right;
 };
 
-template <size_t LENGTH>
-struct Rep {
-    BitsetWrapper<LENGTH> bw;
-    size_t firstInvalidIndex;
-};
+#ifdef DEBUG
 // Helper function to get child type
 std::string getChildType(const Node* node) {
     if (node->left && node->right) return "00"; // Both children are non-null
@@ -53,7 +48,13 @@ void printTree(const Node* root) {
     std::cout << std::endl;
     printTreeLikeStructure(root);
 }
+#endif
 
+template <size_t LENGTH>
+struct Rep {
+    BitsetWrapper<LENGTH> bw;
+    size_t firstInvalidIndex;
+};
 #pragma pack(push, 1)  // Ensure no automatic padding is added
 struct ExpandedLSlot {
     BitsetWrapper<COUNT_SLOT> bw;

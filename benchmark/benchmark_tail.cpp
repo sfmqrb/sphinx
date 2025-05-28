@@ -136,10 +136,6 @@ std::vector<double> runQueryTest(const std::vector<size_t>& queryKeys,
 }
 
 int main() {
-    #ifdef IN_MEMORY_FILE
-    throw std::invalid_argument("Error: IN_MEMORY_FILE is defined");
-    #endif
-
     std::string dataFolder = HOME + "/research/dht/benchmark/data-tail";
     std::filesystem::create_directories(dataFolder);
 

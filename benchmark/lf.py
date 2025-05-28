@@ -145,10 +145,14 @@ def plot_metric(ax, datasets, metric, x_col, smoothing_window, skip, apply_smoot
         y_data = y_data[::2]
         if metric in ["insertion_time", "query_time"]:
             y_data = y_data / 1000
+        if label == "Collis-Free Aleph":
+            labelText = "Adaptive Aleph"
+        else:
+            labelText = label
         ax.plot(
             x_data,
             y_data,
-            label=label,
+            label=labelText,
             color=colors[label],
             marker=markers[label],
             markerfacecolor="none",  # Hollow markers

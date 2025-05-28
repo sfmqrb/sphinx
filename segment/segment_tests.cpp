@@ -70,11 +70,11 @@ TEST_CASE("Segment<TestDefaultTraits>: test 2") {
     PAYLOAD_TYPE pt = ssdLog->write(key, value);
     auto hash_val = Hashing<TestDefaultTraits>::hash_digest(key);
 
-    CHECK(sg.blockList[0].get_block_info()->isExtended == false);
-    CHECK(sg.blockList[0].get_block_info()->remainingBits == 0);
+    CHECK(sg.blockList[0].get_block_info().isExtended == false);
+    CHECK(sg.blockList[0].get_block_info().remainingBits == 0);
     CHECK(sg.write(hash_val, *ssdLog.get(), pt) == true);
-    CHECK(sg.blockList[0].get_block_info()->isExtended == true);
-    CHECK(sg.blockList[0].get_block_info()->remainingBits == 15);
+    CHECK(sg.blockList[0].get_block_info().isExtended == true);
+    CHECK(sg.blockList[0].get_block_info().remainingBits == 15);
 
 //    sg.print();
     sg.print();
@@ -369,11 +369,11 @@ TEST_CASE("Segment<TestDefaultTraitsDHT>: test 2") {
     PAYLOAD_TYPE pt = ssdLog->write(key, value);
     auto hash_val = Hashing<TestDefaultTraits>::hash_digest(key);
 
-    CHECK(sg.blockList[0].get_block_info()->isExtended == false);
-    CHECK(sg.blockList[0].get_block_info()->remainingBits == 0);
+    CHECK(sg.blockList[0].get_block_info().isExtended == false);
+    CHECK(sg.blockList[0].get_block_info().remainingBits == 0);
     CHECK(sg.write(hash_val, *ssdLog.get(), pt) == true);
-    CHECK(sg.blockList[0].get_block_info()->isExtended == true);
-    CHECK(sg.blockList[0].get_block_info()->remainingBits == 15);
+    CHECK(sg.blockList[0].get_block_info().isExtended == true);
+    CHECK(sg.blockList[0].get_block_info().remainingBits == 15);
 
     std::cout << sg.get_ten_all() << std::endl;
 //    sg.print();

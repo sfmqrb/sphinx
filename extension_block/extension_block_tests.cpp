@@ -112,6 +112,7 @@ TEST_CASE("ExtensionBlock: normal block integration") {
         ExtensionBlock<TestDefaultTraits>::moveLSlotsToMakeSpace(orgBlock, 59, blkIdx, extBlocks.data());
         ExtensionBlock<TestDefaultTraits>::moveLSlotsToMakeSpace(orgBlock, 58, blkIdx, extBlocks.data());
 
+        // orgBlock.print();
         // for (auto &c:extBlocks) {
         //     c.print();
         //     c.blk.payload_list.printPayload();
@@ -159,6 +160,13 @@ TEST_CASE("ExtensionBlock: a bit more challenging") {
                 PAYLOAD_TYPE pt = ssdLog->write(key, value);
                 auto hash_val = Hashing<TestDefaultTraits>::hash_digest(key);
                 auto info = orgBlock.write(hash_val, *ssdLog.get(), FPIdx, pt);
+                CHECK(orgBlock.read(hash_val, *ssdLog.get(), FPIdx)->key == key);
+            }
+        }
+        for (auto j = 63; j >= 56; j -= 2) {
+            for (auto i = 0; i < 4; i++) {
+                const KEY_TYPE key = (int64_t)getFP(j, 0, 0, FPIdx, fps[i]);
+                auto hash_val = Hashing<TestDefaultTraits>::hash_digest(key);
                 CHECK(orgBlock.read(hash_val, *ssdLog.get(), FPIdx)->key == key);
             }
         }
@@ -229,8 +237,8 @@ TEST_CASE("ExtensionBlock: lslot extended") {
         PAYLOAD_TYPE pt = ssdLog->write(key, value);
         auto info = orgBlock.write(hash_val, *ssdLog.get(), FPIdx, pt);
 
-        CHECK(info->rs == WriteReturnStatusLslotExtended);
-        CHECK(info->blockInfo->isExtended == true);
-        CHECK(info->blockInfo->firstExtendedLSlot == COUNT_SLOT - 1);
+        CHECK(info.rs == WriteReturnStatusLslotExtended);
+        CHECK(info.blockInfo.isExtended == true);
+        CHECK(info.blockInfo.firstExtendedLSlot == COUNT_SLOT - 1);
     }
 }

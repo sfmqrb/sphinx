@@ -35,7 +35,7 @@ TEST_CASE("DirectoryInsertion") {
     const auto ssdLog = std::make_unique<SSDLog<TestDefaultTraits>>("directory_test_1.txt", 10);
 
     std::vector<std::future<bool>> writeFutures;
-    std::vector<std::future<std::unique_ptr<ENTRY_TYPE>>> readFutures;
+    std::vector<std::future<std::optional<ENTRY_TYPE>>> readFutures;
     std::vector<KEY_TYPE> keys;
     std::vector<VALUE_TYPE> values;
 
@@ -97,7 +97,7 @@ TEST_CASE("DirectoryInsertionToExpand") {
     const auto ssdLog = std::make_unique<SSDLog<TestDefaultTraits>>("directory_test_1.txt", 10);
 
     std::vector<std::future<bool>> writeFutures;
-    std::vector<std::future<std::unique_ptr<ENTRY_TYPE>>> readFutures;
+    std::vector<std::future<std::optional<ENTRY_TYPE>>> readFutures;
     std::vector<KEY_TYPE> keys;
     std::vector<VALUE_TYPE> values;
 
@@ -164,7 +164,7 @@ TEST_CASE("DirectoryInsertionToExpand2") {
     const auto ssdLog = std::make_unique<SSDLog<TestDefaultTraits>>("directory_test_1.txt", 100);
 
     std::vector<std::future<bool>> writeFutures;
-    std::vector<std::future<std::unique_ptr<ENTRY_TYPE>>> readFutures;
+    std::vector<std::future<std::optional<ENTRY_TYPE>>> readFutures;
     std::vector<KEY_TYPE> keys;
     std::vector<VALUE_TYPE> values;
 
@@ -245,7 +245,7 @@ TEST_CASE("DirectoryInsertionToExpandSingleThread") {
     const auto ssdLog = std::make_unique<SSDLog<TestDefaultTraits>>("directory_test_1.txt", 100);
 
     std::vector<bool> writeFutures;
-    std::vector<std::unique_ptr<ENTRY_TYPE>> readFutures;
+    std::vector<std::optional<ENTRY_TYPE>> readFutures;
     std::vector<KEY_TYPE> keys;
     std::vector<VALUE_TYPE> values;
 
@@ -337,7 +337,7 @@ TEST_CASE("DirectoryRemoveSingleThread") {
     const auto ssdLog = std::make_unique<SSDLog<TestDefaultTraits>>("directory_test_1.txt", 100);
 
     std::vector<bool> writeFutures;
-    std::vector<std::unique_ptr<ENTRY_TYPE>> readFutures;
+    std::vector<std::optional<ENTRY_TYPE>> readFutures;
     std::vector<KEY_TYPE> keys;
     std::vector<VALUE_TYPE> values;
 

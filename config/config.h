@@ -6,10 +6,13 @@
 #include "../bitset_wrapper/bitset_wrapper.h"
 
 // ENABLE for in-memory benchmark
-// #define IN_MEMORY_FILE
+#define IN_MEMORY_FILE
+
+// XDP ENABLE
+#define ENABLE_XDP
 
 // only for MT
-// #define ENABLE_MT
+#define ENABLE_MT
 
 // DISABLE for read_latency benchmark and in memory benchmark
 //#define ENABLE_BP_PUT_IN_READ
@@ -25,6 +28,7 @@ constexpr int EXTENDED_BIT_WRAPPER_SIZE = 2 * COUNT_SLOT;
 const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
 
 constexpr size_t BASE_EXP_INSERT_SIZE = 1ull << 20;
+constexpr bool MAIN_BENCHMARK_ZIPF = false;
 
 template <typename KeyType, typename ValueType>
 struct EntryType {
@@ -35,7 +39,7 @@ struct EntryType {
 };
 
 struct DefaultTraits {
-    typedef int32_t PAYLOAD_TYPE;  // Type used for payload data.
+    typedef uint32_t PAYLOAD_TYPE;  // Type used for payload data.
     typedef int64_t KEY_TYPE;      // Type used for keys.
     typedef int64_t VALUE_TYPE;    // Type used for values.
 
@@ -107,8 +111,36 @@ struct DefaultTraits {
     static constexpr bool IS_INFINI = false;
 
     static constexpr bool EXPAND = true;
+
+    // to support the local index in XDP
+    static constexpr bool VAR_LEN_PAYLOAD = false;
+
+    // global index for partially sorting idea
+    static constexpr bool GLOBAL_INDEX = false;
+   
+    // in memory file set 
+    static constexpr bool IN_MEMORY = false;
 };
 
+struct TraitsLI : DefaultTraits {
+    // the log resides in the SSD - uncomment this for in-memory
+    // static constexpr bool IN_MEMORY = true;
+    static constexpr bool VAR_LEN_PAYLOAD = true;
+    static constexpr size_t NUMBER_EXTRA_BITS = 1; // disabled
+};
+struct TraitsLIBuffer : DefaultTraits {
+    // the log resides in the memory for the buffer Sphinx
+    static constexpr bool IN_MEMORY = true;
+    static constexpr bool VAR_LEN_PAYLOAD = false;
+    static constexpr size_t NUMBER_EXTRA_BITS = 1; // disabled
+};
+struct TraitsGI : DefaultTraits {
+    // the log resides in the SSD - uncomment this for in-memory
+    // static constexpr bool IN_MEMORY = true;
+    typedef uint8_t PAYLOAD_TYPE;  // Type used for payload data.
+    static constexpr bool VAR_LEN_PAYLOAD = false;
+    static constexpr size_t NUMBER_EXTRA_BITS = 1; // disabled
+};
 struct TestDefaultTraits : DefaultTraits {
     static constexpr bool USE_XXHASH = false;
 };
@@ -135,7 +167,6 @@ struct TestDefaultTraitsDHTXXHASH : DefaultTraits {
 };
 struct DefaultTraits2 : DefaultTraits {
     static constexpr int BITS_PER_ENTRY = 256;
-    typedef int32_t PAYLOAD_TYPE;
     typedef int8_t KEY_TYPE;
     typedef int8_t VALUE_TYPE;
     using ENTRY_TYPE = EntryType<KEY_TYPE, VALUE_TYPE>;
@@ -164,6 +195,12 @@ struct TestRSQF : DefaultTraits {
 };
 struct TestInfini: DefaultTraits {
     static constexpr int IS_INFINI  = true;
+};
+struct TestRSQFInMem : TestRSQF {
+    static constexpr bool IN_MEMORY = true;
+};
+struct TestInfiniInMem : TestInfini {
+    static constexpr bool IN_MEMORY = true;
 };
 
 struct TestBP2Traits: DefaultTraits {
@@ -237,22 +274,32 @@ struct TestFleckInMemory: DefaultTraits {
     static constexpr size_t BUFFER_POOL_CAP = 0;
 };
 
-struct TestFleckInMemory3ReseverBits: TestFleckInMemory{
-    // disable filters
-    static constexpr size_t NUMBER_EXTRA_BITS = 3; // disabled
+struct TestFleckInMemoryInMem : TestFleckInMemory {
+    static constexpr bool IN_MEMORY = true; // in memory
 };
 
+struct TestFleckInMemoryExtraBits4P32 : TestFleckInMemory {
+    typedef uint32_t PAYLOAD_TYPE;  // Type used for payload data.
+    static constexpr size_t NUMBER_EXTRA_BITS = 4;
+};
+struct TestFleckInMemoryExtraBits4P32InMem : TestFleckInMemoryExtraBits4P32 {
+    static constexpr bool IN_MEMORY = true;
+};
 // extra bits tests
 struct TestFleckInMemoryExtraBits6 : TestFleckInMemory {
+    typedef uint64_t PAYLOAD_TYPE;  // Type used for payload data.
     static constexpr size_t NUMBER_EXTRA_BITS = 6;
 };
 struct TestFleckInMemoryExtraBits4 : TestFleckInMemory {
+    typedef uint64_t PAYLOAD_TYPE;  // Type used for payload data.
     static constexpr size_t NUMBER_EXTRA_BITS = 4;
 };
 struct TestFleckInMemoryExtraBits2 : TestFleckInMemory {
+    typedef uint64_t PAYLOAD_TYPE;  // Type used for payload data.
     static constexpr size_t NUMBER_EXTRA_BITS = 2;
 };
 struct TestFleckInMemoryExtraBits1 : TestFleckInMemory {
+    typedef uint64_t PAYLOAD_TYPE;  // Type used for payload data.
     static constexpr size_t NUMBER_EXTRA_BITS = 1; // disabled
 };
 
@@ -264,6 +311,9 @@ struct TestDHTInMemory: TestFleckInMemory{
     static constexpr size_t READ_OFF_STRATEGY = 20;
     static constexpr size_t WRITE_STRATEGY = 20;
 };
+struct TestDHTInMemoryInMem: TestDHTInMemory {
+    static constexpr bool IN_MEMORY = true; // in memory
+};
 struct TestRealDHTInMemory: TestFleckInMemory{
     // read offset strategy
     static constexpr size_t READ_OFF_STRATEGY = 20;
@@ -271,6 +321,10 @@ struct TestRealDHTInMemory: TestFleckInMemory{
     static constexpr bool DHT_EVERYTHING = true;
     static constexpr int SAFETY_PAYLOADS = 0;
     static constexpr int PAYLOADS_LENGTH = N / BITS_PER_ENTRY + SAFETY_PAYLOADS;
+};
+
+struct TestRealDHTInMemoryInMem: TestRealDHTInMemory {
+    static constexpr bool IN_MEMORY = true; // in memory
 };
 
 struct TestRead: DefaultTraits {
@@ -296,6 +350,10 @@ struct TestMT: TestRead {
     static constexpr int PAYLOADS_LENGTH = N / BITS_PER_ENTRY + SAFETY_PAYLOADS;
 };
 
+
+struct TestMT4ReserveBits: TestMT{
+    static constexpr size_t NUMBER_EXTRA_BITS = 4;
+};
 
 struct TestRead20: TestRead {
     static constexpr float MAX_LF = 0.5;
@@ -325,4 +383,40 @@ struct TestRead10DHT: TestRead10 {
 
 struct TestRead5DHT: TestRead5 {
     static constexpr size_t READ_OFF_STRATEGY = 20; // DHT
+};
+
+struct TestPayloadUint8: DefaultTraits {
+    typedef uint8_t PAYLOAD_TYPE;  // Type used for payload data.
+    static constexpr size_t NUMBER_EXTRA_BITS = 0;
+};
+
+struct TestPayloadUint16: DefaultTraits {
+    typedef uint16_t PAYLOAD_TYPE;  // Type used for payload data.
+    static constexpr size_t NUMBER_EXTRA_BITS = 0; 
+};
+
+struct TestPayloadUint32: DefaultTraits {
+    typedef uint32_t PAYLOAD_TYPE;  // Type used for payload data.
+    static constexpr size_t NUMBER_EXTRA_BITS = 0; 
+};
+
+struct TestPayloadUint64: DefaultTraits {
+    typedef uint64_t PAYLOAD_TYPE;  // Type used for payload data.
+    static constexpr size_t NUMBER_EXTRA_BITS = 0;
+};
+
+struct TestPayloadUint8ExtraBits: DefaultTraits {
+    typedef uint8_t PAYLOAD_TYPE;  // Type used for payload data.
+};
+
+struct TestPayloadUint16ExtraBits: DefaultTraits {
+    typedef uint16_t PAYLOAD_TYPE;  // Type used for payload data.
+};
+
+struct TestPayloadUint32ExtraBits: DefaultTraits {
+    typedef uint32_t PAYLOAD_TYPE;  // Type used for payload data.
+};
+
+struct TestPayloadUint64ExtraBits: DefaultTraits {
+    typedef uint64_t PAYLOAD_TYPE;  // Type used for payload data.
 };

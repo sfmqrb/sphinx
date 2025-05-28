@@ -7,6 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 constexpr size_t count_bits(size_t n, size_t count = -1) {  // same as log2
     return n ? count_bits(n >> 1, count + 1) : count;
@@ -35,61 +36,58 @@ class BitsetWrapper {
 
     uint64_t bitset[(N + REGISTER_SIZE - 1) / REGISTER_SIZE] = {};
 
-    explicit BitsetWrapper(const std::string &binaryString = "") {
+    BitsetWrapper() = default;
+
+    explicit BitsetWrapper(const std::string &binaryString) {
         setInputString(binaryString);
     }
 
     explicit BitsetWrapper(const std::vector<uint64_t>& vals, bool is_array) {
         if (vals.size() != NUM_REGS || !is_array) throw std::invalid_argument("not correct nums of args");
-        for (size_t i = 0; i < NUM_REGS; ++i) {
+        for (size_t i = 0; i < NUM_REGS; ++i)
             this->bitset[i] = vals[i];
-        }
+    }
+    inline BitsetWrapper<N>& operator=(const BitsetWrapper<N>& other) {
+        if (this != &other)
+            std::memcpy(this->bitset, other.bitset, sizeof(bitset));
+        return *this;
     }
 
-//    BitsetWrapper<N>& operator=(const BitsetWrapper<N>& other) {
-//        if (this == &other) {
-//            return *this;
-//        }
-//        for (size_t i = 0; i < NUM_REGS; ++i) {
-//            this->bitset[i] = other.bitset[i];
-//        }
-//        return *this;
-//    }
-    bool operator>(const BitsetWrapper& other) const {
-        for (int i = 0; i < NUM_REGS; i++) {
-            if (bitset[i] != other.bitset[i]) {
-                return bitset[i] > other.bitset[i];
-            }
-        }
-        return false; // If all elements are equal
+    inline bool operator>(const BitsetWrapper& other) const {
+        for (int i = 0; i < N; i++)
+            if (get(i) != other.get(i))
+                return get(i) > other.get(i);
+        return false;
     }
 
-    bool operator<(const BitsetWrapper& other) const {
-        for (int i = 0; i < NUM_REGS; i++) {
-            if (bitset[i] != other.bitset[i]) {
+    inline bool operator<(const BitsetWrapper& other) const {
+        for (int i = 0; i < NUM_REGS; i++)
+            if (bitset[i] != other.bitset[i])
                 return bitset[i] < other.bitset[i];
-            }
-        }
-        return false; // If all elements are equal
+        return false;
     }
-    bool operator==(const BitsetWrapper &other) const {
+    inline bool operator==(const BitsetWrapper &other) const {
         return std::memcmp(bitset, other.bitset, sizeof(bitset)) == 0;
     }
-    bool operator!=(const BitsetWrapper &other) const {
+    inline bool operator!=(const BitsetWrapper &other) const {
         return !(*this == other);
     }
-    BitsetWrapper operator^(const BitsetWrapper &other) const {
+    inline BitsetWrapper operator^(const BitsetWrapper &other) const {
         BitsetWrapper result;
-        for (size_t i = 0; i < NUM_REGS; i++) {
+        for (size_t i = 0; i < NUM_REGS; i++)
             result.bitset[i] = this->bitset[i] ^ other.bitset[i];
-        }
         return result;
     }
-    BitsetWrapper operator&(const BitsetWrapper &other) const {
+    inline BitsetWrapper operator&(const BitsetWrapper &other) const {
         BitsetWrapper result;
-        for (size_t i = 0; i < NUM_REGS; i++) {
+        for (size_t i = 0; i < NUM_REGS; i++)
             result.bitset[i] = this->bitset[i] & other.bitset[i];
-        }
+        return result;
+    }
+    inline BitsetWrapper operator~() const {
+        BitsetWrapper result;
+        for (size_t i = 0; i < NUM_REGS; i++)
+            result.bitset[i] = ~this->bitset[i];
         return result;
     }
     void setInputString(const std::string &binaryString) {
@@ -118,40 +116,37 @@ class BitsetWrapper {
         return s;
     }
 
-    static size_t size() {
+    inline static size_t __attribute__((always_inline)) size() {
         return N;
     }
 
-    [[nodiscard]] size_t get_leading_zeros(size_t reg_idx) const {
+    [[nodiscard]] inline size_t __attribute__((always_inline)) get_leading_zeros(size_t reg_idx) const {
         return __builtin_clzll(bitset[reg_idx]);
     }
 
     // need to be tested
-    [[nodiscard]] size_t get_second_leading_zeros(size_t reg_idx) const {
+    [[nodiscard]] inline size_t __attribute__((always_inline)) get_second_leading_zeros(size_t reg_idx) const {
         int64_t nVal = ~(1ULL << (REGISTER_SIZE - __builtin_clzll(bitset[reg_idx]) - 1)) & bitset[reg_idx];
         if (nVal == 0)
             return REGISTER_SIZE;
         return __builtin_clzll(nVal);
     }
 
-    size_t get_trailing_zeros(size_t reg_idx) {
+    inline size_t __attribute__((always_inline)) get_trailing_zeros(size_t reg_idx) {
         return __builtin_ctzll(bitset[reg_idx]);
     }
 
-    [[nodiscard]] bool get(const size_t index, const size_t from = 0) const {
+    inline bool __attribute__((always_inline)) get(const size_t index, const size_t from = 0) const {
         const size_t agg_index = index + from;
-        if (agg_index >= size()) {
+        if (__builtin_expect(agg_index >= N, 0))
             throw std::invalid_argument("index out of bound 1");
-        }
         const size_t idx = GET_INDEX(agg_index), offset = GET_OFFSET(agg_index);
         return static_cast<bool>(bitset[idx] & 1ULL << offset);
     }
-
-    [[nodiscard]] int get_first_one_before_slow(const size_t index, const size_t from = 0) const {
+    inline int get_first_one_before_slow(const size_t index, const size_t from = 0) const {
         const size_t agg_index = index + from;
-        if (agg_index >= N) {
+        if (__builtin_expect(agg_index >= N, 0))
             throw std::out_of_range("index out of bound 2");
-        }
 
         // Start from the given index and move backwards
         for (int i = static_cast<int>(agg_index); i > 0; --i) {
@@ -163,11 +158,9 @@ class BitsetWrapper {
         return -1;
     }
 
-    [[nodiscard]] size_t range(const size_t index1, const size_t index2) const {
-        if (index2 < index1 || index2 > N) {
+    inline size_t range(const size_t index1, const size_t index2) const {
+        if (__builtin_expect((index2 < index1 || index2 > N), 0))
             throw std::invalid_argument("Invalid index range");
-        }
-
         size_t result = 0;
         // could be faster
         for (size_t i = index1; i < index2; i++) {
@@ -176,10 +169,9 @@ class BitsetWrapper {
         return result;
     }
 
-    [[nodiscard]] size_t range_fast(const size_t index1, const size_t index2) const {
-        if (index2 < index1 || index2 > N) {
+    inline size_t range_fast(const size_t index1, const size_t index2) const {
+        if (__builtin_expect((index2 < index1 || index2 > N), 0))
             throw std::invalid_argument("Invalid index range");
-        }
         const size_t idx1 = GET_INDEX(index1);
         const size_t offset1 = GET_OFFSET(index1);
         const size_t idx2 = GET_INDEX(index2);
@@ -192,14 +184,14 @@ class BitsetWrapper {
         throw std::invalid_argument("should not be here in range fast");
     }
 
-    auto range_fast_one_reg(const size_t index, const size_t offset1, const size_t offset2) const {
+    inline auto __attribute__((always_inline)) range_fast_one_reg(const size_t index, const size_t offset1, const size_t offset2) const {
         auto x = bitset[index] >> offset1;
         auto y = (1ULL << (offset2 - offset1)) - 1;
         auto z = (x & y);
         return z;
     }
 
-    auto range_fast_2(const size_t index1, const size_t index2) const {
+    inline auto __attribute__((always_inline)) range_fast_2(const size_t index1, const size_t index2) const {
         const size_t idx1 = GET_INDEX(index1);
         const size_t offset1 = GET_OFFSET(index1);
         const size_t idx2 = GET_INDEX(index2);
@@ -215,10 +207,9 @@ class BitsetWrapper {
         throw std::invalid_argument("should not be here in range 2");
     }
 
-    bool set(const size_t index, bool value) {
-        if (index >= size()) {
+    inline bool __attribute__((always_inline)) set(const size_t index, bool value) {
+        if (__builtin_expect((index >= size()), 0))
             throw std::invalid_argument("index out of bound set 2");
-        }
         const size_t idx = GET_INDEX(index), offset = GET_OFFSET(index);
         if (idx * REGISTER_SIZE + offset >= size()) {
             return false;
@@ -287,7 +278,7 @@ class BitsetWrapper {
         return size();
     }
 
-    [[nodiscard]] inline size_t __attribute__((always_inline)) rank(const size_t pos) const {
+    inline size_t __attribute__((always_inline)) rank(const size_t pos) const {
         // exclusive the end
         const size_t index = GET_INDEX(pos), offset = GET_OFFSET(pos);
         size_t count = 0;
@@ -299,7 +290,7 @@ class BitsetWrapper {
         return count;
     }
 
-    [[nodiscard]] inline size_t __attribute__((always_inline)) select(const size_t nth, const size_t start_from_reg = 0) const {
+    inline size_t __attribute__((always_inline)) select(const size_t nth, const size_t start_from_reg = 0) const {
         size_t count = 0;
         size_t blockPopCount = 0;
         size_t i;
@@ -316,7 +307,7 @@ class BitsetWrapper {
     }
 
     // at most in two adjacent registers
-    [[nodiscard]] std::pair<size_t, size_t> select_two(const size_t fromth, const size_t toth, const size_t start_from_reg = 0) const {
+    inline std::pair<size_t, size_t> select_two(const size_t fromth, const size_t toth, const size_t start_from_reg = 0) const {
         size_t count = 0;
         size_t i1 = start_from_reg;
         uint64_t block = bitset[i1];
@@ -353,8 +344,9 @@ class BitsetWrapper {
         return std::make_pair(fromth_return, toth_return);
     }
 
-    std::pair<size_t, size_t> select2(const size_t nth, const size_t start_from_reg = 0) {
-        if (nth == 0) throw std::out_of_range("nth must be greater than 0.");
+    inline std::pair<size_t, size_t> select2(const size_t nth, const size_t start_from_reg = 0) {
+        if (__builtin_expect(nth == 0, 0))
+            throw std::out_of_range("nth must be greater than 0.");
 
         size_t count = 0;
         for (size_t i = start_from_reg; i < (N + REGISTER_SIZE - 1) >> REGISTER_SIZE_BITS; ++i) {
@@ -376,88 +368,107 @@ class BitsetWrapper {
         }
         return std::make_pair(size(), 0);
     }
-    void count_contiguous(size_t &index, int &count) const {
+    inline void count_contiguous(size_t &index, int &count) const {
         // stop *after* the first 0
         while (!get(index++)) {
             count++;
         }
     }
 
-    void count_contiguous_until_false(size_t &index, int &count) const {
+    inline void count_contiguous_until_false(size_t &index, int &count) const {
         // stop *after* the first 0
         while (get(index++)) {
             count++;
         }
     }
 
-    void deprecated_shift(int steps, size_t from, size_t to = size()) {
+    inline void deprecated_shift(int64_t steps, int64_t from, int64_t to = size()) {
         // to exclusive / from inclusive
-        if (!(to > from && to <= size())) {
-            throw std::invalid_argument("should not be here in shift");
+    #ifdef DEBUG
+        if (!(to >= from && to <= size())) {
+            throw std::invalid_argument("Invalid to/from range");
         }
+    #endif
         if (steps == 0) return;
 
         if (steps > 0) {
             // Right shift
-            for (size_t i = to - 1; i >= from + steps; --i) {
+            for (auto i = to - 1; i >= from + steps; --i) {
                 set(i, get(i - steps));
             }
             // Clear the bits that have been shifted out
-            for (size_t i = from; i < from + steps; ++i) {
+            for (auto i = from; i < from + std::min(steps, to - from); ++i) {
                 set(i, false);
             }
         } else {
             // Left shift
-            size_t abs_steps = -steps;
-            for (size_t i = from; i < to - abs_steps; ++i) {
+            int64_t abs_steps = -steps;
+            for (auto i = from; i < to - abs_steps; ++i) {
                 set(i, get(i + abs_steps));
             }
-            for (size_t i = to - abs_steps; i < to; ++i) {
+            for (auto i = to - std::min(abs_steps, to - from); i < to; ++i) {
                 set(i, false);
             }
         }
     }
-
-    void shift_smart(int steps, size_t from, size_t to = size()) {
-        // to exclusive / from inclusive
+// some ideas
+// remove steps sign so remove one branch
+    inline void shift_smart(int steps, size_t from, size_t to = size()) {
         const size_t bitShift = std::abs(steps);
-        if (!(to >= from && to <= size()))
-            throw std::invalid_argument("should not be here in shift - to / from");
-        if (bitShift >= REGISTER_SIZE)
-            throw std::invalid_argument("should not be here in shift - steps");
-
-        if (steps == 0) return;
-        if (to == from) return;
-
-        const size_t startIdx = GET_INDEX(from);
-        const size_t endIdx = GET_INDEX(to - 1);
-
-        const size_t startOffset = GET_OFFSET(from);
-        const size_t endOffset = GET_OFFSET(to - 1);
-
-        auto oneOnMSBEnd = GET_ONE_MSB(endOffset + 1);
-        auto zeroOnMSBStart = GET_ZERO_MSB(startOffset);
-        auto to2end = bitset[endIdx] & oneOnMSBEnd;
-        auto start2from = bitset[startIdx] & zeroOnMSBStart;
-
+    #ifdef DEBUG
+        if (!(to >= from && to <= size())) {
+            throw std::invalid_argument("Invalid to/from range");
+        }
+        if (bitShift >= REGISTER_SIZE) {
+            throw std::invalid_argument("Shift exceeds register size");
+        }
+    #endif
+    
+        if (steps == 0 || to == from) return;
+    
+        const uint64_t startIdx = GET_INDEX(from);
+        const uint64_t endIdx = GET_INDEX(to - 1);
+        const uint64_t startOffset = GET_OFFSET(from);
+        const uint64_t endOffset = GET_OFFSET(to - 1);
+        const uint64_t oneOnMSBEnd = GET_ONE_MSB(endOffset + 1);
+        const uint64_t zeroOnMSBStart = GET_ZERO_MSB(startOffset);
+        const uint64_t to2end = bitset[endIdx] & oneOnMSBEnd;
+        const uint64_t start2from = bitset[startIdx] & zeroOnMSBStart;
+    
         if (steps > 0) {
-            for (auto i = static_cast<int>(endIdx); i > static_cast<int>(startIdx); --i) {
-                uint64_t lowPart = (bitset[i - 1] >> (REGISTER_SIZE - bitShift));
-                bitset[i] = (bitset[i] << bitShift) | lowPart;
+            // Mask and compute spill over for startIdx
+            const uint64_t startMask = ~zeroOnMSBStart;
+            uint64_t maskedStart = bitset[startIdx] & startMask;
+    
+            // Shift elements from end to start
+            for (int64_t i = endIdx; i > static_cast<int64_t>(startIdx); --i) {
+                uint64_t prev = (i == startIdx + 1) ? maskedStart : bitset[i - 1];
+                bitset[i] = (bitset[i] << bitShift) | (prev >> (REGISTER_SIZE - bitShift));
             }
-            bitset[startIdx] = ((bitset[startIdx] & ~(zeroOnMSBStart)) << bitShift);
-
+    
+            // Apply shifts to startIdx and restore preserved bits
+            bitset[startIdx] = (maskedStart << bitShift) | start2from;
             bitset[endIdx] = (bitset[endIdx] & ~oneOnMSBEnd) | to2end;
-            bitset[startIdx] |= start2from;
         } else {
-            for (auto i = static_cast<int>(startIdx); i < static_cast<int>(endIdx); ++i) {
-                uint64_t highPart = (bitset[i + 1] << (REGISTER_SIZE - bitShift));
-                bitset[i] = (bitset[i] >> bitShift) | highPart;
+            // Mask and compute spill over for endIdx
+            const uint64_t endMask = ~oneOnMSBEnd;
+            uint64_t maskedEnd = bitset[endIdx] & endMask;
+    
+            // Shift elements from start to end
+            for (int64_t i = startIdx; i < static_cast<int64_t>(endIdx); ++i) {
+                uint64_t next = (i == endIdx - 1) ? maskedEnd : bitset[i + 1];
+                bitset[i] = (bitset[i] >> bitShift) | (next << (REGISTER_SIZE - bitShift));
             }
-            bitset[endIdx] = ((bitset[endIdx] & ~(oneOnMSBEnd)) >> bitShift);
-
-            bitset[endIdx] |= to2end;
+    
+            // Apply shifts to endIdx and restore preserved bits
+            bitset[endIdx] = (maskedEnd >> bitShift) | to2end;
             bitset[startIdx] = (bitset[startIdx] & ~zeroOnMSBStart) | start2from;
         }
+    }
+
+    BitsetWrapper<N> replicateTrieStore() const {
+        BitsetWrapper<N> copy;
+        std::memcpy(copy.bitset, this->bitset, sizeof(this->bitset));
+        return copy;
     }
 };
