@@ -306,6 +306,10 @@ struct TestFleckInMemoryExtraBits1 : TestFleckInMemory {
 struct TestFleckInMemoryNoExpand : TestFleckInMemory {
     static constexpr bool EXPAND = false;
 };
+struct TestFleckInMemoryNoExpandInMem : TestFleckInMemoryNoExpand {
+    static constexpr bool IN_MEMORY = true; // in memory
+};
+
 struct TestDHTInMemory: TestFleckInMemory{
     // read offset strategy
     static constexpr size_t READ_OFF_STRATEGY = 20;

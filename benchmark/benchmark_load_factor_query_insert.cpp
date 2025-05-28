@@ -365,7 +365,7 @@ void performTestFilterRSQFNoExp() {
                                                  12345 /* seed */);
     filter.metadata_->max_lf = 0.99;
     filter.set_auto_resize(false);
-    auto ssdLog = std::make_unique<SSDLog<TestRSQF>>("directory_cpu_test.txt", 1000000);
+    auto ssdLog = std::make_unique<SSDLog<TestRSQFInMem>>("directory_cpu_test.txt", 1000000);
     RunFilter(filter, *ssdLog, extra_numKeys, false);
 }
 
@@ -381,7 +381,7 @@ void performTestPHT() {
     filter.set_auto_resize(false);
     std::unordered_map<size_t, size_t> stash_dict;
     stash_dict.reserve(4);
-    auto ssdLog = std::make_unique<SSDLog<TestInfini>>("directory_cpu_test.txt", 1000000);
+    auto ssdLog = std::make_unique<SSDLog<TestInfiniInMem>>("directory_cpu_test.txt", 1000000);
     RunPHT(filter, stash_dict, *ssdLog, extra_numKeys);
 }
 
@@ -392,9 +392,9 @@ int main() {
     std::cout << " Test Perfect HT\n";
     performTestPHT();
     std::cout << " Test DHT\n";
-    performTest<TestRealDHTInMemory>();
+    performTest<TestRealDHTInMemoryInMem>();
     std::cout << " Test Fleck\n";
-    performTest<TestFleckInMemoryNoExpand>();
+    performTest<TestFleckInMemoryNoExpandInMem>();
     std::cout << " Test RSQFNoExp\n";
     performTestFilterRSQFNoExp();
     return 0;
