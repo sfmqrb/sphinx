@@ -4,7 +4,7 @@ import seaborn as sns
 import os
 import numpy as np
 from matplotlib.ticker import LogLocator, NullFormatter
-from consts import amp2
+from consts import amp2, proj_name
 
 sns.set_theme(
     style="whitegrid",
@@ -23,7 +23,7 @@ from_ = 3000
 
 # folder containing the csv files
 home_dir = os.environ.get("HOME")
-folder = os.path.join(home_dir, "research/sphinx-review/benchmark/data-extra-bits")
+folder = os.path.join(home_dir, f"research/{proj_name}/benchmark/data-extra-bits")
 
 # define the csv files (adjust the names if needed)
 files = {

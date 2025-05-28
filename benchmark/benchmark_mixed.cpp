@@ -577,7 +577,7 @@ int main() {
 #ifndef IN_MEMORY_FILE
     std::vector<std::pair<std::string, std::string>> configs = {
         {HOME +
-        "/research/sphinx-review/benchmark/data-optane-zipf",
+        "/research/sphinx/benchmark/data-optane-zipf",
         "/optane/log/directory_test.txt"},
     };
     // Iterate over each configuration
@@ -603,7 +603,7 @@ int main() {
     }
 #else
     auto dataFolder =
-        HOME + "/research/sphinx-review/benchmark/data-memory-zipf";
+        HOME + "/research/sphinx/benchmark/data-memory-zipf";
     const auto ssdLogPath = "directory_cpu_test.txt";
     std::filesystem::create_directories(dataFolder);
     std::cout << " Test RSQF\n";

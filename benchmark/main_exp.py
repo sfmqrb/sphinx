@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from consts import amp2
+from consts import amp2, proj_name
 
 sns.set_theme(
     style="whitegrid",
@@ -243,7 +243,7 @@ modes = ["optane", "ssd"]
 metrics = ["query_time", "tail-99-q", "update_time", "tail-99-u"]
 for row, mode in enumerate(modes):
     base_path = os.path.join(
-        home_dir, "research", "sphinx-review", "benchmark", f"data-{mode}"
+        home_dir, "research", proj_name, "benchmark", f"data-{mode}"
     )
     datasets = {
         label: pd.read_csv(os.path.join(base_path, file))

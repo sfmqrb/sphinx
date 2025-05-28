@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from consts import amp2
+from consts import amp2, proj_name
 
 sns.set_theme(
     style="whitegrid",
@@ -246,7 +246,7 @@ def plot_metric(
 fig_mem, axes_mem = plt.subplots(1, 6, figsize=(39, 7))
 mode = "memory"
 base_path = os.path.join(
-    home_dir, "research", "sphinx-review", "benchmark", "data-memory"
+    home_dir, "research", proj_name, "benchmark", "data-memory"
 )
 datasets = {
     label: pd.read_csv(os.path.join(base_path, file))

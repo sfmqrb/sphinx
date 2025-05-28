@@ -162,7 +162,7 @@ void Run(Directory<Traits>& dir,
             // Optionally flush data to file every SAMPLE_WINDOW writes
             // (Assuming metrics.printToFile overwrites or appends as needed.)
             // metrics.printToFile( { "num_entries", "insertion_time", "query_time", "LF", "memory" },
-            //                      HOME + "/research/dht/benchmark/data-lf/benchmark_[Name]_partial");
+            //                      HOME + "/research/sphinx/benchmark/data-lf/benchmark_[Name]_partial");
 
             // Reset accumulators:
             total_insertion_time = 0;
@@ -180,7 +180,7 @@ void Run(Directory<Traits>& dir,
         name = "Fleck";
     }
     metrics.printToFile( { "num_entries", "insertion_time", "query_time", "LF", "memory" },
-                         HOME + "/research/dht/benchmark/data-lf/benchmark_", name);
+                         HOME + "/research/sphinx/benchmark/data-lf/benchmark_", name);
 }
 
 
@@ -267,7 +267,7 @@ void RunPHT(memento::Memento<true>& filter,
     }
     
     metrics.printToFile( { "num_entries", "insertion_time", "query_time", "LF", "memory" },
-                         HOME + "/research/dht/benchmark/data-lf/benchmark_", "Perfect_HT");
+                         HOME + "/research/sphinx/benchmark/data-lf/benchmark_", "Perfect_HT");
 }
 
 
@@ -338,7 +338,7 @@ void RunFilter(memento::Memento<Traits::IS_INFINI>& filter,
         }
     }
     metrics.printToFile( { "num_entries", "insertion_time", "query_time", "memory", "LF" },
-                         HOME + "/research/dht/benchmark/data-lf/benchmark_", name);
+                         HOME + "/research/sphinx/benchmark/data-lf/benchmark_", name);
 }
 
 //----------------------------------------------------------------------
@@ -386,7 +386,7 @@ void performTestPHT() {
 }
 
 int main() {
-    std::string dataFolder = HOME + "/research/sphinx-review/benchmark/data-lf";
+    std::string dataFolder = HOME + "/research/sphinx/benchmark/data-lf";
     std::filesystem::create_directories(dataFolder);
     // ===============================================================
     std::cout << " Test Perfect HT\n";

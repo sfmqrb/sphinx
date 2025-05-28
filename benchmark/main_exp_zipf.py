@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from consts import amp2
+from consts import amp2, proj_name
 
 sns.set_theme(
     style="whitegrid",
@@ -165,7 +165,7 @@ def plot_metric(
 # Generate Memory Figure (5 columns)
 fig_mem, axes_mem = plt.subplots(1, 5, figsize=(39, 7))
 mode = "memory"
-base_path = os.path.join(home_dir, "research", "sphinx-review", "benchmark", "data-memory-zipf")
+base_path = os.path.join(home_dir, "research", proj_name, "benchmark", "data-memory-zipf")
 datasets = {
     label: pd.read_csv(os.path.join(base_path, file))
     for label, file in data_files.items()
@@ -176,7 +176,7 @@ fig_ossd, axes_ossd = plt.subplots(1, 2, figsize=(15, 8))
 modes = ["memory", "optane"]
 idx = 0
 for row, mode in enumerate(modes):
-    base_path = os.path.join(home_dir, "research", "sphinx-review", "benchmark", f"data-{mode}-zipf")
+    base_path = os.path.join(home_dir, "research", proj_name, "benchmark", f"data-{mode}-zipf")
     datasets = {
         label: pd.read_csv(os.path.join(base_path, file))
         for label, file in data_files.items()

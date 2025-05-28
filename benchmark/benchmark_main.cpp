@@ -770,14 +770,14 @@ void performTestPHT(const std::string &ssdLogPath, const std::string &folder) {
 int main() {
 #ifndef IN_MEMORY_FILE
     std::vector<std::pair<std::string, std::string>> configs = {
-        {HOME + "/research/sphinx-review/benchmark/data-ssd", "/data/fleck/directory_test.txt"},
-//        {HOME + "/research/sphinx-review/benchmark/data-optane", "/optane/log/directory_test.txt"},
+        {HOME + "/research/sphinx/benchmark/data-ssd", "/data/fleck/directory_test.txt"},
+//        {HOME + "/research/sphinx/benchmark/data-optane", "/optane/log/directory_test.txt"},
     };
 
     if constexpr (MAIN_BENCHMARK_ZIPF) {
         configs = {
-            {HOME + "/research/sphinx-review/benchmark/data-ssd-zipf", "/data/fleck/directory_test.txt"},
-//            {HOME + "/research/sphinx-review/benchmark/data-optane-zipf", "/optane/log/directory_test.txt"},
+            {HOME + "/research/sphinx/benchmark/data-ssd-zipf", "/data/fleck/directory_test.txt"},
+//            {HOME + "/research/sphinx/benchmark/data-optane-zipf", "/optane/log/directory_test.txt"},
         };
     }
     // Iterate over each configuration
@@ -801,7 +801,7 @@ int main() {
         performTest<TestFleckInMemoryExtraBits4P32>(ssdLogPath, dataFolder);
     }
 #else
-    auto dataFolder = HOME + "/research/sphinx-review/benchmark/data-memory";
+    auto dataFolder = HOME + "/research/sphinx/benchmark/data-memory";
     if constexpr (MAIN_BENCHMARK_ZIPF) {
         dataFolder += "-zipf";
     }

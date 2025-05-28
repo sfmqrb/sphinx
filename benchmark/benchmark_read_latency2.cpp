@@ -150,7 +150,7 @@ int main() {
 #endif
 
     // Ensure the data-skew directory exists
-    std::string dirPath = HOME + "/research/sphinx-review/benchmark/data-skew";
+    std::string dirPath = HOME + "/research/sphinx/benchmark/data-skew";
     if (!fs::exists(dirPath)) {
         fs::create_directory(dirPath);
     }

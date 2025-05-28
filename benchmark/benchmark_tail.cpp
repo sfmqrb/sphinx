@@ -136,7 +136,7 @@ std::vector<double> runQueryTest(const std::vector<size_t>& queryKeys,
 }
 
 int main() {
-    std::string dataFolder = HOME + "/research/dht/benchmark/data-tail";
+    std::string dataFolder = HOME + "/research/sphinx/benchmark/data-tail";
     std::filesystem::create_directories(dataFolder);
 
     std::vector<std::string> ssdLogPaths = {

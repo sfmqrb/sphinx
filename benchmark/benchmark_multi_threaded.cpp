@@ -119,10 +119,10 @@ int main()
         // "optane",
         "ssd",
     };
-    std::filesystem::create_directories(HOME + "/research/dht/benchmark/data-mt");
+    std::filesystem::create_directories(HOME + "/research/sphinx/benchmark/data-mt");
     // Open CSV file for throughput results
     for (auto mode: modes) {
-        std::ofstream csvFile(HOME + "/research/sphinx-review/benchmark/data-mt/throughput_vs_threads_4ReserveBits" + mode + ".csv");
+        std::ofstream csvFile(HOME + "/research/sphinx/benchmark/data-mt/throughput_vs_threads_4ReserveBits" + mode + ".csv");
         std::string ssdFilePath;
         if (mode == "optane") {
             ssdFilePath = "/optane/log/directory_test2.txt";
@@ -194,7 +194,7 @@ int main()
         csvFile.close();
     }
     for (auto mode: modes) {
-        std::ofstream csvFile(HOME + "/research/sphinx-review/benchmark/data-mt/throughput_vs_threads_" + mode + ".csv");
+        std::ofstream csvFile(HOME + "/research/sphinx/benchmark/data-mt/throughput_vs_threads_" + mode + ".csv");
         std::string ssdFilePath;
         if (mode == "optane") {
             ssdFilePath = "/optane/log/directory_test2.txt";

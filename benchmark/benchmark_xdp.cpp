@@ -72,7 +72,7 @@ void runXDPMemTest(const std::string &folder) {
 
 int main() {
 #ifdef ENABLE_XDP
-    auto dataFolder = HOME + "/research/sphinx-review/benchmark/data-memory";
+    auto dataFolder = HOME + "/research/sphinx/benchmark/data-memory";
     std::filesystem::create_directories(dataFolder);
     std::cout << " Test XDP\n";
     runXDPMemTest(dataFolder);

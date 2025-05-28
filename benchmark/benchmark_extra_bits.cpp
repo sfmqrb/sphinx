@@ -433,7 +433,7 @@ void performTestFilterInfini(const std::string& ssdLogPath, const std::string& f
 int main() {
     // Define a vector of configurations (folder for output and SSD log file path)
     std::vector<std::pair<std::string, std::string>> configs = {
-        {HOME + "/research/sphinx-review/benchmark/data-extra-bits", "/data/fleck/directory_test_3.txt"},
+        {HOME + "/research/sphinx/benchmark/data-extra-bits", "/data/fleck/directory_test_3.txt"},
     };
 
     // Iterate over each configuration folder

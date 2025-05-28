@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from consts import amp2
+from consts import amp2, proj_name
 
 sns.set_theme(
     style="whitegrid",
@@ -53,7 +53,7 @@ elif mode == "ssd":
 def_offset = 0.3
 def_rate = 1
 
-base_path = os.path.join(home_dir, "research", "dht", "benchmark", directory)
+base_path = os.path.join(home_dir, "research", "sphinx", "benchmark", directory)
 data_files = {
     "Sphinx": "benchmark_Sphinx.csv",
     "Sphinx-Loop": "benchmark_Sphinx-Loop.csv",
