@@ -512,8 +512,9 @@ class Directory {
             return whole;
         }
     }
-    auto get_memory_including_ptr() const {
+    auto get_memory_including_ptr(int max_chunk_id = -1) const {
         auto ptr_size = sizeof(typename Traits::PAYLOAD_TYPE) * 8;
+        ptr_size = max_chunk_id == -1 ? ptr_size : ceil(log2(max_chunk_id));
         if constexpr (!Traits::DHT_EVERYTHING) {
             size_t ex_bits_per_block = 0;
             if constexpr (Traits::NUMBER_EXTRA_BITS > 1) {
@@ -539,8 +540,9 @@ class Directory {
             size_t ptr_size_in_bits = 0;
             if constexpr (Traits::VAR_LEN_PAYLOAD) 
                 ptr_size_in_bits = (COUNT_SLOT + Traits::SEGMENT_EXTENSION_BLOCK_SIZE) * get_count_unique_segs() * 128;
-            else
+            else {
                 ptr_size_in_bits = (COUNT_SLOT + Traits::SEGMENT_EXTENSION_BLOCK_SIZE) * get_count_unique_segs() * (ptr_size * Traits::PAYLOADS_LENGTH);
+            }
             whole += ptr_size_in_bits;
             return whole;
         }

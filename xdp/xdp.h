@@ -222,7 +222,7 @@ class XDP {
 
     std::vector<double> get_memory_footprint() const {
         // global index 
-        auto mem_gi_footprint = dirGI->get_memory_including_ptr()  ;
+        auto mem_gi_footprint = dirGI->get_memory_including_ptr(boundaries.size());
         // local Indexes
         size_t local_index_footprint = 0;
         for (const auto &dir : dirLIList) {

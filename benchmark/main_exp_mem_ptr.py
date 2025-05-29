@@ -5,6 +5,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from consts import amp2, proj_name
 
+normal_ptr_label = "pointer"
+global_ptr = "chunk ID"
+local_ptr = "page offset"
+index_meta = "Trie Store"
+
+
 # ── 0) Theme ───────────────────────────────────────────────────────────────
 sns.set_theme(
     style="whitegrid",
@@ -30,88 +36,103 @@ df_sphinx = pd.read_csv(
 # ── 2) Compute closest indices ──────────────────────────────────────────────
 targets = [10**6, 10**7, 10**8]
 entries = df_xdp.index.to_numpy()
-closest_exact = [int(entries[np.abs(entries - T).argmin()]) for T in targets]
+closest_exact1 = [1.05587e+06, 8.44696e+06, 6.75756e+07]
+closest_exact2 = [992014, 7.93611e+06, 6.34889e+07]
 
 # ── 3) Rolling-min(25) ──────────────────────────────────────────────────────
-df_xdp_rm = df_xdp.rolling(25, min_periods=1).min()
-df_sphinx_rm = df_sphinx.rolling(25, min_periods=1).min()
-xdp_sel = df_xdp_rm.loc[closest_exact]
-sphinx_sel = df_sphinx_rm.loc[closest_exact].copy()
+df_xdp_rm = df_xdp.rolling(1, min_periods=1).min()
+df_sphinx_rm = df_sphinx.rolling(1, min_periods=1).min()
+xdp_sel = df_xdp_rm.loc[closest_exact1]
+sphinx_sel = df_sphinx_rm.loc[closest_exact2].copy()
 
 # ── 4) Compute Sphinx overhead ───────────────────────────────────────────────
 sphinx_sel["overhead"] = sphinx_sel["memory_including_ptr"] - sphinx_sel["memory"]
 
-# ── 5) Segments & palettes ──────────────────────────────────────────────────
-xdp_segs = ["index_global", "index_local", "ptr_global", "ptr_local"]
-sphinx_segs = ["memory", "overhead"]
-greens = ["#1b7837", "#4dac26"]  # even darker greens for indexes
-grays = ["#a0a0a0", "#4e4e4e"]  # darker grays for pointers
-xdp_colors = greens + grays
-xdp_hatches = ["//", "\\\\", "..", "xx"]  # tighter hatches
-sphinx_colors = ["#00441b", "#000000"]  # dark green and black for sphinx
-sphinx_hatches = ["--", "o"]
+# ── 5) Compute merged metadata and pointers ─────────────────────────────────
+xdp_meta = xdp_sel["index_global"] + xdp_sel["index_local"]
+xdp_global_ptr = xdp_sel["ptr_global"]
+xdp_local_ptr = xdp_sel["ptr_local"]
+sphinx_meta = sphinx_sel["memory"]
+normal_ptr = sphinx_sel["overhead"]
 
 # ── 6) Bar positions ────────────────────────────────────────────────────────
-x = np.arange(len(closest_exact))
+x = np.arange(len(closest_exact1))
 width = 0.8
 alpha = 1.85
-xdp_pos = alpha * x - width / 2
-sphinx_pos = alpha * x + width / 2
+xdp_pos = alpha * x + width / 2
+sphinx_pos = alpha * x - width / 2
 
 # ── 7) Plot ─────────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(11, 4.3))
 
-# XDP bars
+# Define hatches (black-and-white only)
+hatch_meta = '////'
+hatch_global = '\\'
+hatch_local = '\\\\'
+hatch_normal = '//'
+# XDP bars (compact)
 bottom = np.zeros(len(x))
-legend_map = {
-    "index_global": "global metadata",
-    "index_local": "local metadata",
-    "ptr_global": "global pointer",
-    "ptr_local": "local pointer",
-}
-for i, seg in enumerate(xdp_segs):
-    col = xdp_colors[i]
-    ax.bar(
-        xdp_pos,
-        xdp_sel[seg].values,
-        width,
-        bottom=bottom,
-        facecolor="white",
-        edgecolor=col,
-        hatch=xdp_hatches[i],
-        linewidth=1.5,
-        label=legend_map[seg],
-    )
-    # Matplotlib>=3.4 supports hatch_color:
-    for bar in ax.containers[-1]:
-        bar.set_hatch(bar.get_hatch())
-        bar.set_edgecolor(col)
-        bar.set_facecolor("white")
-        bar.set_linewidth(1.5)
-    bottom += xdp_sel[seg].values
+ax.bar(
+    xdp_pos,
+    xdp_meta.values,
+    width,
+    bottom=bottom,
+    facecolor='white',
+    edgecolor='black',
+    hatch=hatch_meta,
+    linewidth=1.5,
+    label=index_meta,
+)
+bottom += xdp_meta.values
+ax.bar(
+    xdp_pos,
+    xdp_global_ptr.values,
+    width,
+    bottom=bottom,
+    facecolor='white',
+    edgecolor='black',
+    hatch=hatch_global,
+    linewidth=1.5,
+    label=global_ptr,
+)
+bottom += xdp_global_ptr.values
+ax.bar(
+    xdp_pos,
+    xdp_local_ptr.values,
+    width,
+    bottom=bottom,
+    facecolor='white',
+    edgecolor='black',
+    hatch=hatch_local,
+    linewidth=1.5,
+    label=local_ptr,
+)
 
-# Sphinx bars
+# Sphinx bars (normal)
 bottom = np.zeros(len(x))
-sphinx_map = {"memory": "normal metadata", "overhead": "normal pointer"}
-for i, seg in enumerate(sphinx_segs):
-    col = sphinx_colors[i]
-    ax.bar(
-        sphinx_pos,
-        sphinx_sel[seg].values,
-        width,
-        bottom=bottom,
-        facecolor="white",
-        edgecolor=col,
-        hatch=sphinx_hatches[i],
-        linewidth=1.5,
-        label=sphinx_map[seg],
-    )
-    for bar in ax.containers[-1]:
-        bar.set_hatch(bar.get_hatch())
-        bar.set_edgecolor(col)
-        bar.set_facecolor("white")
-        bar.set_linewidth(1.5)
-    bottom += sphinx_sel[seg].values
+ax.bar(
+    sphinx_pos,
+    sphinx_meta.values,
+    width,
+    bottom=bottom,
+    facecolor='white',
+    edgecolor='black',
+    hatch=hatch_meta,
+    linewidth=1.5,
+    label=index_meta,
+)
+bottom += sphinx_meta.values
+ax.bar(
+    sphinx_pos,
+    normal_ptr.values,
+    width,
+    bottom=bottom,
+    facecolor='white',
+    edgecolor='black',
+    hatch=hatch_normal,
+    linewidth=1.5,
+    label=normal_ptr_label,
+)
 
 # ── 8) X-axis labeling ──────────────────────────────────────────────────────
 diff = 0.06
@@ -120,12 +141,12 @@ all_positions = np.ravel(
 )
 ax.set_xticks(all_positions)
 ax.set_yticks(np.arange(0, 43, 10))
-ax.set_xticklabels(["compact", "normal"] * len(closest_exact))
+ax.set_xticklabels(["compres.", "full"] * len(closest_exact1))
 # use 10**6, 10**7, 10**8 as labels
-for xi, lab in zip(x - 0.08, [r"$10^6$", r"$10^7$", r"$10^8$"]):
+for xi, lab in zip(x, [r"$10^6$", r"$10^7$", r"$10^8$"]):
     ax.text(
         xi * alpha,
-        -0.13,
+        -0.2,
         lab,
         transform=ax.get_xaxis_transform(),
         ha="center",
@@ -134,63 +155,42 @@ for xi, lab in zip(x - 0.08, [r"$10^6$", r"$10^7$", r"$10^8$"]):
     )
 
 ax.set_xlabel("#entries", fontsize=22 * font_amp)
-ax.xaxis.set_label_coords(0.46, -0.25)
+ax.xaxis.set_label_coords(0.49, -0.41)
 
 # ── 9) Styling ───────────────────────────────────────────────────────────────
-ax.set_ylabel("min memory (bits/entry)", fontsize=22 * font_amp, fontweight="bold")
-ax.yaxis.set_label_coords(-0.08, 0.35)
+ax.set_ylabel("bits / entry", fontsize=22 * font_amp, fontweight="bold")
+ax.yaxis.set_label_coords(-0.055, 0.5)
 ax.tick_params(axis="y", labelsize=20 * font_amp)
-ax.tick_params(axis="x", labelsize=18.5 * font_amp, rotation=15, pad=-8)
-
+ax.tick_params(axis="x", labelsize=20 * font_amp, rotation=0, pad=-1)
 ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 ax.grid(False)
 
 # ── 10) Legend ──────────────────────────────────────────────────────────────
 handles, labels = ax.get_legend_handles_labels()
-order = [
-    "global metadata",
-    "local metadata",
-    "normal metadata",
-    "global pointer",
-    "local pointer",
-    "normal pointer",
-]
+order = [index_meta, global_ptr, local_ptr, normal_ptr_label]
+print(order)
+print("-----------------------------")
 new_handles = [handles[labels.index(name)] for name in order]
-
-handles1, labels1 = new_handles[:3], order[:3]
-leg1 = ax.legend(
-    handles1,
-    labels1,
-    title="",
-    fontsize=21 * font_amp,
-    loc="center left",
-    bbox_to_anchor=(0.965, 0.15),
-    frameon=False,
-    handletextpad=0.3,  # <<–– tighter spacing here
-    # labelspacing=0.1      # vertical gap
-)
-
-ax.add_artist(leg1)
-
-handles2, labels2 = new_handles[3:], order[3:]
 ax.legend(
-    handles2,
-    labels2,
+    new_handles,
+    order,
     title="",
     fontsize=21 * font_amp,
-    loc="center left",
-    bbox_to_anchor=(0.965, 0.72),
+    loc="upper center",
+    bbox_to_anchor=(0.45, 1.37),
     frameon=False,
-    handletextpad=0.3,  # <<–– tighter spacing here
-    # labelspacing=0.1      # vertical gap
+    handletextpad=0.3,
+    ncol=4,
+    columnspacing=0.5,
+    handlelength=2.5,
 )
 ax.margins(x=0.01)
 
-
 # ── 11) Tighten margins ─────────────────────────────────────────────────────
 plt.tight_layout(pad=0.1)
-plt.subplots_adjust(top=0.98, bottom=0.25, left=0.082, right=0.680)
+plt.subplots_adjust(top=0.87, bottom=0.30, left=0.082, right=1)
 
 plt.savefig("memory_comparison.svg", dpi=300)
 plt.close(fig)
+
