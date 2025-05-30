@@ -111,27 +111,35 @@ class Directory {
 #endif
                 doubleSegmentDataVec();
             }
-            const size_t diff = max_FP_index - shared_ptr_seg->FP_index;
-            for (auto i = 0; i < (1 << (diff - 1)); i++) {
-                {
-                    if ((*segDataVec)[seg1idx].segment == shared_ptr_seg) {
-                        (*segDataVec)[seg1idx].segment = seg1ptr;
-                    } else {
-                        // std::lock_guard<std::mutex> lockseg1(shared_ptr_seg->segmentMutex);
-                        (*segDataVec)[seg1idx].segment = seg1ptr;
-                    }
-                }
-                {
-                    if ((*segDataVec)[seg2idx].segment == shared_ptr_seg) {
-                        (*segDataVec)[seg2idx].segment = seg2ptr;
-                    } else {
-                        // std::lock_guard<std::mutex> lockseg2(shared_ptr_seg->segmentMutex);
-                        (*segDataVec)[seg2idx].segment = seg2ptr;
-                    }
-                }
+            {
 
-                seg1idx += 2 * step;
-                seg2idx += 2 * step;
+#ifdef ENABLE_MT
+                std::lock_guard<std::mutex> lock_seg_vec(g_segDataVecMutex);
+#endif
+                const size_t diff = max_FP_index - shared_ptr_seg->FP_index;
+                for (auto i = 0; i < (1 << (diff - 1)); i++) {
+                    {
+                        if ((*segDataVec)[seg1idx].segment == shared_ptr_seg) {
+                            (*segDataVec)[seg1idx].segment = seg1ptr;
+                        } 
+                        // else {
+                        //     // std::lock_guard<std::mutex> lockseg1(shared_ptr_seg->segmentMutex);
+                        //     (*segDataVec)[seg1idx].segment = seg1ptr;
+                        // }
+                    }
+                    {
+                        if ((*segDataVec)[seg2idx].segment == shared_ptr_seg) {
+                            (*segDataVec)[seg2idx].segment = seg2ptr;
+                        } 
+                        // else {
+                        //     // std::lock_guard<std::mutex> lockseg2(shared_ptr_seg->segmentMutex);
+                        //     (*segDataVec)[seg2idx].segment = seg2ptr;
+                        // }
+                    }
+
+                    seg1idx += 2 * step;
+                    seg2idx += 2 * step;
+                }
             }
         }
         // does not need this because expansion makes the segment invalid

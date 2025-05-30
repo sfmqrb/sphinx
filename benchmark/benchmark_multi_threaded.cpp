@@ -136,7 +136,7 @@ int main()
         std::iota(keys.begin(), keys.end(), 0ULL);
 
         // Thread counts to test
-        std::vector<size_t> threadCounts = {1, 2, 4, 8, 16, 32, 64};
+        std::vector<size_t> threadCounts = {};
 
         constexpr size_t segmentCountLog = 6;
         constexpr int repetitions = 3;
@@ -155,12 +155,15 @@ int main()
                 // Run benchmarks
                 double insertThroughput = measureInsertionThroughput(dir, *ssdLog, keys);
                 std::cout << "N Q insert" << ssdLog->numQ << std::endl;
+                std::cout << "throughput: " << insertThroughput << std::endl;
                 ssdLog->numQ = 0;
                 double readThroughput = measureReadThroughput(dir, *ssdLog, keys);
                 std::cout << "N Q read" << ssdLog->numQ << std::endl;
+                std::cout << "throughput: " << readThroughput << std::endl;
                 ssdLog->numQ = 0;
                 double randomReadThroughput = measureRandomReadThroughput(dir, *ssdLog, keys);
                 std::cout << "N Q random read" << ssdLog->numQ << std::endl;
+                std::cout << "throughput: " << randomReadThroughput << std::endl;
                 ssdLog->numQ = 0;
 
                 // Collect results
@@ -208,7 +211,7 @@ int main()
         std::iota(keys.begin(), keys.end(), 0ULL);
 
         // Thread counts to test
-        std::vector<size_t> threadCounts = {1, 2, 4, 8, 16, 32, 64};
+        std::vector<size_t> threadCounts = {32, 64};
 
         constexpr size_t segmentCountLog = 6;
         constexpr int repetitions = 3;
@@ -227,12 +230,15 @@ int main()
                 // Run benchmarks
                 double insertThroughput = measureInsertionThroughput(dir, *ssdLog, keys);
                 std::cout << "N Q insert" << ssdLog->numQ << std::endl;
+                std::cout << "N Q insert throughput: " << insertThroughput << std::endl;
                 ssdLog->numQ = 0;
                 double readThroughput = measureReadThroughput(dir, *ssdLog, keys);
                 std::cout << "N Q read" << ssdLog->numQ << std::endl;
+                std::cout << "N Q read throughput: " << readThroughput << std::endl;
                 ssdLog->numQ = 0;
                 double randomReadThroughput = measureRandomReadThroughput(dir, *ssdLog, keys);
                 std::cout << "N Q random read" << ssdLog->numQ << std::endl;
+                std::cout << "N Q random read throughput: " << randomReadThroughput << std::endl;
                 ssdLog->numQ = 0;
 
                 // Collect results

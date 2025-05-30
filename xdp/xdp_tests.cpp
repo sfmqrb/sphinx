@@ -25,7 +25,7 @@ TEST_CASE("Simple XDP Test") {
         REQUIRE(e->value == 1);
 
         auto res = xdp.get_memory_footprint();
-        REQUIRE(res[0] == 54912);
+        REQUIRE(res[0] == 22544);
         REQUIRE(res[1] == 53248);
         REQUIRE(res[2] == 166144);
     }
