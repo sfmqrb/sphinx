@@ -25,7 +25,7 @@ def_offset = 0.3
 def_rate = 1
 
 alphbets = [
-    "memory", "Optane"
+    "memory", "Optane", "SSD"
 ]
 
 data_files = {
@@ -153,8 +153,8 @@ def plot_metric(
     if metric == "insertion_time" and mode == "ssd":
         ax.set_xlim(min_entries // 1.3, 10**8)
     ax.set_ylabel(ylabel, fontsize=font_ampl * 18, fontweight="bold")
-    if ylabel_fix:
-        ax.yaxis.set_label_coords(-0.16, 0.5)
+    # if ylabel_fix:
+    #     ax.yaxis.set_label_coords(-0.16, 0.5)
     ax.set_xscale("log")
     if show_all_ticks:
         ax.set_xticks(
@@ -162,9 +162,6 @@ def plot_metric(
         )
     ax.tick_params(axis="both", which="major", labelsize=19 * font_ampl)
 
-# Generate Memory Figure (5 columns)
-fig_mem, axes_mem = plt.subplots(1, 5, figsize=(39, 7))
-mode = "memory"
 base_path = os.path.join(home_dir, "research", proj_name, "benchmark", "data-memory-zipf")
 datasets = {
     label: pd.read_csv(os.path.join(base_path, file))
@@ -172,8 +169,8 @@ datasets = {
     if os.path.exists(os.path.join(base_path, file))
 }
 metrics = ["ops/sec"]
-fig_ossd, axes_ossd = plt.subplots(1, 2, figsize=(15, 8))
-modes = ["memory", "optane"]
+fig_ossd, axes_ossd = plt.subplots(1, 3, figsize=(30, 6.5))
+modes = ["memory", "optane", "ssd"]
 idx = 0
 for row, mode in enumerate(modes):
     base_path = os.path.join(home_dir, "research", proj_name, "benchmark", f"data-{mode}-zipf")
@@ -199,14 +196,14 @@ fig_ossd.legend(
     lines,
     labels,
     loc="upper center",
-    ncol=3,  # change this based on how many entries you have
+    ncol=7,  # change this based on how many entries you have
     fontsize=font_ampl * 20,
     frameon=False,
-    bbox_to_anchor=(0.5, 1.03),  # push the legend upward slightly
+    bbox_to_anchor=(0.5, 1.06),  # push the legend upward slightly
 )
 
 # Adjust the layout to make room for the legend
-fig_ossd.tight_layout(rect=[0, 0, 1, 0.78])
+fig_ossd.tight_layout(rect=[0, 0, 1, 0.93])
 
-fig_ossd.savefig("benchmark_plots_main_zipf_mem_optane.svg")
+fig_ossd.savefig("benchmark_plots_main_zipf.svg")
 plt.close(fig_ossd)

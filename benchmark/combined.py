@@ -64,7 +64,7 @@ for i, buff in enumerate(unique_buffer_sizes):
     )
 
 ax1.set_xlabel("(A) buffer hit (%)", fontsize=font_ampl * 20)
-ax1.set_ylabel("Sphinx latency speedup", fontsize=font_ampl * 19, fontweight="bold")
+ax1.set_ylabel("Sphinx speedup", fontsize=font_ampl * 20, fontweight="bold")
 ax1.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.2f"))
 
 filtered_ticks = [
@@ -143,7 +143,7 @@ for col in ["ReadThroughput_ops_s", "InsertThroughput_ops_s", "MaximumThroughput
     )
 
 ax2.set_xlabel("(B) thread count", fontsize=font_ampl * 20)
-ax2.set_ylabel("throughput (ops/s)", fontsize=font_ampl * 19, fontweight="bold")
+ax2.set_ylabel("throughput (ops/s)", fontsize=font_ampl * 20, fontweight="bold")
 ax2.set_xscale("log")
 ax2.set_yscale("log", base=2)
 ax2.yaxis.set_major_locator(ticker.LogLocator(base=2))

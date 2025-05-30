@@ -56,7 +56,7 @@ markers = {"Sphinx": "o", "Aleph": "s", "Sphinx-Loop": "^"}
 colors = {"Sphinx": "#006400", "Aleph": "#000000", "Sphinx-Loop": "#B8860B"}
 
 # Create a figure with 1 row and 2 columns
-fig, axes = plt.subplots(1, 2, figsize=(24, 9.5))
+fig, axes = plt.subplots(1, 2, figsize=(24, 8.8))
 
 # Plot data on each subplot
 for ax, (storage_type, datasets) in zip(axes, [("SSD", datasets_ssd), ("Optane", datasets_optane)]):
@@ -93,7 +93,8 @@ for ax, (storage_type, datasets) in zip(axes, [("SSD", datasets_ssd), ("Optane",
     ax.set_xticks(tick_positions)
     ax.set_xticklabels([f"{tp}%" for tp in tick_percentiles], fontsize=font_ampl*18)
     ax.set_xlabel("percentile (%)", fontsize=font_ampl*20)
-    ax.set_ylabel(storage_type + " latency (μs)", fontsize=font_ampl*18, fontweight='bold')
+    ax.set_ylabel(storage_type + " latency (μs)", fontsize=font_ampl*19, fontweight='bold')
+    # move ylabel to the left
     ax.set_xlim(0.21, 5.15)  # End chart at 99.99 (max x = 2 - log10(0.01) = 4)
     
     # Remove top and right axes
@@ -107,9 +108,11 @@ for ax, (storage_type, datasets) in zip(axes, [("SSD", datasets_ssd), ("Optane",
     # Add legend in the top left corner in one column
     ax.legend(loc='upper left', ncol=1, fontsize=font_ampl*20, frameon=False, bbox_to_anchor=(-0.05, 1.1))
 
+axes[1].yaxis.set_label_coords(-0.1, 0.42)  # Adjust y-label position
 axes[1].set_ylim(0, 5.2)
 axes[0].set_ylim(0, 280.000)
 
 plt.tight_layout()
+plt.subplots_adjust(wspace=0.3)
 plt.savefig("tail_latency_distribution.svg")
 

@@ -576,9 +576,11 @@ void performTestPHT(const std::string &ssdLogPath, const std::string &folder) {
 int main() {
 #ifndef IN_MEMORY_FILE
     std::vector<std::pair<std::string, std::string>> configs = {
-        {HOME +
-        "/research/sphinx/benchmark/data-optane-zipf",
-        "/optane/log/directory_test.txt"},
+        // {
+            // HOME + "/research/sphinx/benchmark/data-optane-zipf",
+            // "/optane/log/directory_test.txt"},
+        {HOME + "/research/sphinx/benchmark/data-ssd-zipf",
+         "/data/fleck/directory_test.txt"},
     };
     // Iterate over each configuration
     for (const auto &[dataFolder, ssdLogPath] : configs) {
