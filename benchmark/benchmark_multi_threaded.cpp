@@ -136,7 +136,7 @@ int main()
         std::iota(keys.begin(), keys.end(), 0ULL);
 
         // Thread counts to test
-        std::vector<size_t> threadCounts = {};
+        std::vector<size_t> threadCounts = {1, 2, 4, 8, 16, 32, 64};
 
         constexpr size_t segmentCountLog = 6;
         constexpr int repetitions = 3;
@@ -211,7 +211,7 @@ int main()
         std::iota(keys.begin(), keys.end(), 0ULL);
 
         // Thread counts to test
-        std::vector<size_t> threadCounts = {32, 64};
+        std::vector<size_t> threadCounts = {1, 2, 4, 8, 16, 32, 64};
 
         constexpr size_t segmentCountLog = 6;
         constexpr int repetitions = 3;
