@@ -20,7 +20,7 @@ std::string HOME = std::getenv("HOME");
 
 // For demonstration, define a constant for how many keys we insert/read.
 // (Adjust to match your actual test size)
-static constexpr size_t NUM_KEYS = 1 << 22; // 1 million keys, e.g.
+static constexpr size_t NUM_KEYS = 1 << 22; // 4 million keys, e.g.
 
 // ***********************************************************
 // Benchmark functions (unchanged)
