@@ -25,22 +25,14 @@ def_offset = 0.3
 def_rate = 1
 
 alphbets = [
-    "A-memory",
-    "B-memory",
-    "C-memory",
-    "D-memory",
-    "E-memory",
-    "F-memory",
     "A-Optane",
     "B-Optane",
     "C-Optane",
     "D-Optane",
-    "E-Optane",
     "A-SSD",
     "B-SSD",
     "C-SSD",
     "D-SSD",
-    "E-SSD",
 ]
 
 data_files = {
@@ -224,7 +216,7 @@ def plot_metric(
 
 
     if ylabel_fix:
-        ax.yaxis.set_label_coords(-0.14, 0.43)
+        ax.yaxis.set_label_coords(-0.16, 0.43)
     ax.set_xscale("log")
     if show_all_ticks:
         ax.set_xticks(
@@ -238,7 +230,7 @@ def plot_metric(
 
 
 # Generate Optane+SSD Figure (2 rows, 4 columns)
-fig_ossd, axes_ossd = plt.subplots(2, 4, figsize=(30, 11))
+fig_ossd, axes_ossd = plt.subplots(2, 4, figsize=(30, 10))
 modes = ["optane", "ssd"]
 metrics = ["query_time", "tail-99-q", "update_time", "tail-99-u"]
 for row, mode in enumerate(modes):
@@ -250,7 +242,7 @@ for row, mode in enumerate(modes):
         for label, file in data_files.items()
         if os.path.exists(os.path.join(base_path, file))
     }
-    start_idx = 5 if mode == "optane" else 10
+    start_idx = 0 if mode == "optane" else 4 
     for col in range(4):
         plot_metric(
             metrics[col],
@@ -275,8 +267,9 @@ for row, mode in enumerate(modes):
 lines, labels = axes_ossd[0, 1].get_legend_handles_labels()
 fig_ossd.legend(
     lines, labels, loc="upper center", ncol=7, fontsize=font_ampl * 20, frameon=False,
-    bbox_to_anchor=(0.5, 1.03)
+    bbox_to_anchor=(0.5, 1.04)
 )
-fig_ossd.tight_layout(rect=[0, 0, 1, 0.97])
+fig_ossd.tight_layout(rect=[0, 0, 1, 0.95])
+fig_ossd.subplots_adjust(bottom=0.11, wspace=0.3)
 fig_ossd.savefig("benchmark_plots_main_optane_ssd.svg")
 plt.close(fig_ossd)

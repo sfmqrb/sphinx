@@ -197,7 +197,7 @@ def main():
     datasets = load_datasets(data_dir, files)
 
     # Create a 1x4 grid of subplots
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
     # Plot each metric:
     # 1. Insertion Time (smoothed)
@@ -220,6 +220,7 @@ def main():
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
     plt.tight_layout(rect=[0, 0, 1, 0.90])
+    plt.subplots_adjust(bottom=0.20, top=0.85)
     plt.savefig("lf_benchmark_plot.svg")
 
 
